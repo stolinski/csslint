@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "tool": "csslint",
+  "summary": {
+    "filesScanned": 1,
+    "filesLinted": 1,
+    "errors": 1,
+    "warnings": 0,
+    "fixesApplied": 0,
+    "durationMs": 3,
+    "exitCode": 1
+  },
+  "diagnostics": [
+    {
+      "filePath": "src/main.css",
+      "severity": "error",
+      "message": "Missing rule id field",
+      "span": {
+        "startOffset": 0,
+        "endOffset": 4,
+        "startLine": 1,
+        "startColumn": 1,
+        "endLine": 1,
+        "endColumn": 5
+      },
+      "fix": {
+        "available": false
+      }
+    }
+  ],
+  "internalErrors": [],
+  "timing": {
+    "parseMs": 1,
+    "semanticMs": 0,
+    "rulesMs": 1,
+    "fixMs": 0
+  }
+}

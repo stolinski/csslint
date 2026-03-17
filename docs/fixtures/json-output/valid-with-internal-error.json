@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "tool": "csslint",
+  "summary": {
+    "filesScanned": 1,
+    "filesLinted": 0,
+    "errors": 0,
+    "warnings": 0,
+    "fixesApplied": 0,
+    "durationMs": 4,
+    "exitCode": 2
+  },
+  "diagnostics": [],
+  "internalErrors": [
+    {
+      "kind": "config_error",
+      "message": "Unknown rule id: no_foo",
+      "filePath": ".csslint"
+    }
+  ],
+  "timing": {
+    "parseMs": 0,
+    "semanticMs": 0,
+    "rulesMs": 0,
+    "fixMs": 0
+  }
+}

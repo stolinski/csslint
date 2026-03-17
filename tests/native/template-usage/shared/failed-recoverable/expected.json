@@ -1,0 +1,11 @@
+{
+  "status": "FailedRecoverable",
+  "facts": [],
+  "unknownRegions": [],
+  "diagnostics": [
+    {
+      "message": "TODO: replace with concrete parser diagnostic",
+      "span": null
+    }
+  ]
+}

@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 1,
+  "tool": "csslint",
+  "summary": {
+    "filesScanned": 3,
+    "filesLinted": 3,
+    "errors": 1,
+    "warnings": 1,
+    "fixesApplied": 0,
+    "durationMs": 12,
+    "exitCode": 1
+  },
+  "diagnostics": [
+    {
+      "filePath": "src/App.svelte",
+      "ruleId": "no_global_leaks",
+      "severity": "error",
+      "message": "Scoped style contains accidental global selector",
+      "span": {
+        "startOffset": 128,
+        "endOffset": 149,
+        "startLine": 12,
+        "startColumn": 3,
+        "endLine": 12,
+        "endColumn": 24
+      },
+      "fix": {
+        "available": false
+      }
+    },
+    {
+      "filePath": "src/styles.css",
+      "ruleId": "no_empty_rules",
+      "severity": "warn",
+      "message": "Unexpected empty rule block",
+      "span": {
+        "startOffset": 10,
+        "endOffset": 14,
+        "startLine": 2,
+        "startColumn": 1,
+        "endLine": 2,
+        "endColumn": 5
+      },
+      "fix": {
+        "available": true,
+        "startOffset": 10,
+        "endOffset": 14,
+        "replacement": ""
+      }
+    }
+  ],
+  "internalErrors": [],
+  "timing": {
+    "parseMs": 3,
+    "semanticMs": 2,
+    "rulesMs": 5,
+    "fixMs": 0
+  }
+}

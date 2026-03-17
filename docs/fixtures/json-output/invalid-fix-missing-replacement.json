@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "tool": "csslint",
+  "summary": {
+    "filesScanned": 1,
+    "filesLinted": 1,
+    "errors": 0,
+    "warnings": 1,
+    "fixesApplied": 0,
+    "durationMs": 3,
+    "exitCode": 0
+  },
+  "diagnostics": [
+    {
+      "filePath": "src/main.css",
+      "ruleId": "no_empty_rules",
+      "severity": "warn",
+      "message": "Invalid fix shape for test",
+      "span": {
+        "startOffset": 8,
+        "endOffset": 12,
+        "startLine": 1,
+        "startColumn": 9,
+        "endLine": 1,
+        "endColumn": 13
+      },
+      "fix": {
+        "available": true,
+        "startOffset": 8,
+        "endOffset": 12
+      }
+    }
+  ],
+  "internalErrors": [],
+  "timing": {
+    "parseMs": 1,
+    "semanticMs": 0,
+    "rulesMs": 1,
+    "fixMs": 0
+  }
+}

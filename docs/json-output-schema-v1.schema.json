@@ -1,0 +1,288 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://csslint.dev/schemas/json-output-v1.schema.json",
+  "title": "csslint JSON Output Schema v1",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "tool",
+    "summary",
+    "diagnostics",
+    "internalErrors",
+    "timing"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "type": "integer",
+      "const": 1
+    },
+    "tool": {
+      "type": "string",
+      "const": "csslint"
+    },
+    "summary": {
+      "$ref": "#/$defs/summary"
+    },
+    "diagnostics": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/diagnostic"
+      }
+    },
+    "internalErrors": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/internalError"
+      }
+    },
+    "timing": {
+      "$ref": "#/$defs/timing"
+    }
+  },
+  "$defs": {
+    "summary": {
+      "type": "object",
+      "required": [
+        "filesScanned",
+        "filesLinted",
+        "errors",
+        "warnings",
+        "fixesApplied",
+        "durationMs",
+        "exitCode"
+      ],
+      "properties": {
+        "filesScanned": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "filesLinted": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "errors": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "warnings": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "fixesApplied": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "durationMs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "exitCode": {
+          "type": "integer",
+          "enum": [
+            0,
+            1,
+            2
+          ]
+        }
+      }
+    },
+    "timing": {
+      "type": "object",
+      "required": [
+        "parseMs",
+        "semanticMs",
+        "rulesMs",
+        "fixMs"
+      ],
+      "properties": {
+        "parseMs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "semanticMs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "rulesMs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "fixMs": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "span": {
+      "type": "object",
+      "required": [
+        "startOffset",
+        "endOffset",
+        "startLine",
+        "startColumn",
+        "endLine",
+        "endColumn"
+      ],
+      "properties": {
+        "startOffset": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "endOffset": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "startLine": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "startColumn": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "endLine": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "endColumn": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "fix": {
+      "type": "object",
+      "required": [
+        "available"
+      ],
+      "properties": {
+        "available": {
+          "type": "boolean"
+        },
+        "startOffset": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "endOffset": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "replacement": {
+          "type": "string"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "available": {
+                "const": true
+              }
+            },
+            "required": [
+              "available"
+            ]
+          },
+          "then": {
+            "required": [
+              "startOffset",
+              "endOffset",
+              "replacement"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "available": {
+                "const": false
+              }
+            },
+            "required": [
+              "available"
+            ]
+          },
+          "then": {
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "startOffset"
+                  ]
+                },
+                {
+                  "required": [
+                    "endOffset"
+                  ]
+                },
+                {
+                  "required": [
+                    "replacement"
+                  ]
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "diagnostic": {
+      "type": "object",
+      "required": [
+        "filePath",
+        "ruleId",
+        "severity",
+        "message",
+        "span",
+        "fix"
+      ],
+      "properties": {
+        "filePath": {
+          "type": "string"
+        },
+        "ruleId": {
+          "type": "string"
+        },
+        "severity": {
+          "type": "string",
+          "enum": [
+            "warn",
+            "error"
+          ]
+        },
+        "message": {
+          "type": "string"
+        },
+        "span": {
+          "$ref": "#/$defs/span"
+        },
+        "fix": {
+          "$ref": "#/$defs/fix"
+        }
+      }
+    },
+    "internalError": {
+      "type": "object",
+      "required": [
+        "kind",
+        "message"
+      ],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "config_error",
+            "runtime_error",
+            "internal_error"
+          ]
+        },
+        "message": {
+          "type": "string"
+        },
+        "filePath": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}
