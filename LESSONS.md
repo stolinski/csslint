@@ -14,3 +14,4 @@
 - `lightningcss` currently resolves as prerelease on crates.io, so parser dependency must pin an explicit alpha version (for example `1.0.0-alpha.71`) instead of `1`.
 - Keep dependency-policy checks manifest-driven (tomllib) instead of `cargo metadata` so policy validation remains stable across toolchain/registry edge cases.
 - Semantic indexes should use deterministic key ordering (BTreeMap + ordered IDs) so diagnostics remain stable across runs.
+- Conservative selector normalization should collapse whitespace only outside quotes/brackets/parentheses so attribute and pseudo arguments are not rewritten aggressively.

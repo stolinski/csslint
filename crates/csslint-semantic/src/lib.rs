@@ -330,7 +330,84 @@ fn split_selectors(selector_list: &str) -> Vec<String> {
 }
 
 fn normalize_selector(raw: &str) -> String {
-    raw.split_whitespace().collect::<Vec<_>>().join(" ")
+    let mut normalized = String::new();
+    let mut pending_space = false;
+    let mut quote: Option<char> = None;
+    let mut bracket_depth = 0usize;
+    let mut paren_depth = 0usize;
+
+    for current in raw.trim().chars() {
+        if let Some(active_quote) = quote {
+            normalized.push(current);
+            if current == active_quote {
+                quote = None;
+            }
+            continue;
+        }
+
+        match current {
+            '"' | '\'' => {
+                if pending_space && should_emit_space(&normalized, current) {
+                    normalized.push(' ');
+                }
+                pending_space = false;
+                quote = Some(current);
+                normalized.push(current);
+            }
+            '[' => {
+                if pending_space && should_emit_space(&normalized, current) {
+                    normalized.push(' ');
+                }
+                pending_space = false;
+                bracket_depth += 1;
+                normalized.push(current);
+            }
+            ']' => {
+                bracket_depth = bracket_depth.saturating_sub(1);
+                normalized.push(current);
+            }
+            '(' => {
+                paren_depth += 1;
+                normalized.push(current);
+            }
+            ')' => {
+                paren_depth = paren_depth.saturating_sub(1);
+                normalized.push(current);
+            }
+            ',' => {
+                while normalized.ends_with(' ') {
+                    normalized.pop();
+                }
+                normalized.push(',');
+                pending_space = true;
+            }
+            _ if current.is_ascii_whitespace() => {
+                if bracket_depth == 0 && paren_depth == 0 {
+                    pending_space = true;
+                } else {
+                    normalized.push(current);
+                }
+            }
+            _ => {
+                if pending_space && should_emit_space(&normalized, current) {
+                    normalized.push(' ');
+                }
+                pending_space = false;
+                normalized.push(current);
+            }
+        }
+    }
+
+    normalized
+}
+
+fn should_emit_space(current: &str, next: char) -> bool {
+    let _ = next;
+    if current.is_empty() {
+        return false;
+    }
+
+    !current.ends_with(' ')
 }
 
 fn selector_parts(raw: &str, scope: Scope) -> Vec<SelectorPart> {
@@ -515,5 +592,29 @@ mod tests {
         let semantic = build_semantic_model(&parsed);
         assert_eq!(semantic.rules.len(), 1);
         assert!(semantic.rules[0].declaration_ids.is_empty());
+    }
+
+    #[test]
+    fn normalizes_selector_whitespace_conservatively() {
+        assert_eq!(
+            super::normalize_selector("  .foo   .bar   "),
+            ".foo .bar"
+        );
+        assert_eq!(
+            super::normalize_selector(".foo   >   .bar"),
+            ".foo > .bar"
+        );
+    }
+
+    #[test]
+    fn keeps_attribute_and_quote_spacing_intact() {
+        assert_eq!(
+            super::normalize_selector("[data-title=\"hello   world\"]   .x"),
+            "[data-title=\"hello   world\"] .x"
+        );
+        assert_eq!(
+            super::normalize_selector(".icon\\+name   +   a"),
+            ".icon\\+name + a"
+        );
     }
 }
