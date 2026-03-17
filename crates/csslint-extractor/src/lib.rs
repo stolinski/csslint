@@ -105,15 +105,36 @@ fn extract_component_styles(file_id: FileId, source: &str, framework: FrameworkK
         };
 
         let close_end = close_start + STYLE_CLOSE_TAG.len();
+        if framework == FrameworkKind::Vue && attrs.src {
+            diagnostics.push(Diagnostic::new(
+                RuleId::from("unsupported_external_style_src"),
+                Severity::Warn,
+                "Vue <style src> is not resolved in v1",
+                Span::new(open_start, open_end + 1),
+                file_id,
+            ));
+            cursor = close_end;
+            continue;
+        }
+
+        if let Some(lang) = attrs.lang.as_ref() {
+            if !lang.eq_ignore_ascii_case("css") {
+                diagnostics.push(Diagnostic::new(
+                    RuleId::from("unsupported_style_lang"),
+                    Severity::Error,
+                    format!("Unsupported style language '{lang}' in component style block"),
+                    Span::new(open_start, open_end + 1),
+                    file_id,
+                ));
+                cursor = close_end;
+                continue;
+            }
+        }
+
         let content = source
             .get(content_start..close_start)
             .unwrap_or("")
             .to_string();
-
-        let lang = match attrs.lang {
-            Some(value) if !value.eq_ignore_ascii_case("css") => StyleLang::Other(value),
-            _ => StyleLang::Css,
-        };
 
         styles.push(ExtractedStyle {
             file_id,
@@ -121,7 +142,7 @@ fn extract_component_styles(file_id: FileId, source: &str, framework: FrameworkK
             content,
             start_offset: content_start,
             end_offset: close_start,
-            lang,
+            lang: StyleLang::Css,
             scope: scope_for(framework, attrs.scoped, attrs.module),
             scoped: attrs.scoped,
             module: attrs.module,
@@ -153,12 +174,14 @@ fn scope_for(framework: FrameworkKind, scoped: bool, module: bool) -> Scope {
 struct StyleAttributes {
     scoped: bool,
     module: bool,
+    src: bool,
     lang: Option<String>,
 }
 
 fn parse_style_attributes(input: &str) -> StyleAttributes {
     let mut scoped = false;
     let mut module = false;
+    let mut src = false;
     let mut lang = None;
     let bytes = input.as_bytes();
     let mut index = 0;
@@ -225,6 +248,7 @@ fn parse_style_attributes(input: &str) -> StyleAttributes {
         match key.as_str() {
             "scoped" => scoped = true,
             "module" => module = true,
+            "src" => src = true,
             "lang" => lang = value,
             _ => {}
         }
@@ -233,6 +257,7 @@ fn parse_style_attributes(input: &str) -> StyleAttributes {
     StyleAttributes {
         scoped,
         module,
+        src,
         lang,
     }
 }
@@ -343,6 +368,36 @@ mod tests {
     }
 
     #[test]
+    fn skips_vue_src_blocks_with_warning() {
+        let source = "<style src=\"./remote.css\">.ignored { color: red; }</style>";
+        let result = extract_styles(FileId::new(9), Path::new("Comp.vue"), source);
+
+        assert!(result.styles.is_empty());
+        assert_eq!(result.diagnostics.len(), 1);
+        assert_eq!(result.diagnostics[0].rule_id.as_str(), "unsupported_external_style_src");
+    }
+
+    #[test]
+    fn skips_unsupported_lang_blocks_with_error() {
+        let source = "<style lang=\"scss\">$color: red;</style>";
+        let result = extract_styles(FileId::new(10), Path::new("Comp.vue"), source);
+
+        assert!(result.styles.is_empty());
+        assert_eq!(result.diagnostics.len(), 1);
+        assert_eq!(result.diagnostics[0].rule_id.as_str(), "unsupported_style_lang");
+    }
+
+    #[test]
+    fn marks_vue_module_variants_as_module_blocks() {
+        let source = "<style module>.a { color: red; }</style>\n<style module=\"named\">.b { color: blue; }</style>";
+        let result = extract_styles(FileId::new(11), Path::new("Comp.vue"), source);
+
+        assert_eq!(result.styles.len(), 2);
+        assert!(result.styles[0].module);
+        assert!(result.styles[1].module);
+    }
+
+    #[test]
     fn extracts_svelte_style_block() {
         let source = "<script>let n = 1;</script>\n<style>h1 { font-size: 2rem; }</style>";
         let result = extract_styles(FileId::new(3), Path::new("Comp.svelte"), source);
@@ -358,19 +413,4 @@ mod tests {
             .unwrap_or("")
             .to_string()
     }
-}
-
-    let scope = match syntax {
-        StyleSyntax::Css => Scope::Global,
-        StyleSyntax::Vue => Scope::VueScoped,
-        StyleSyntax::Svelte => Scope::SvelteScoped,
-    };
-
-    vec![ExtractedStyle {
-        file_id,
-        syntax,
-        scope,
-        span: Span::new(0, source.len()),
-        source: source.to_string(),
-    }]
 }

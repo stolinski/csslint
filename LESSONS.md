@@ -7,3 +7,4 @@
 - Keeping `RuleId` as a shared core type (instead of per-crate strings) prevents conversion shims and keeps config/rules/reporting contracts aligned.
 - Dependency direction drift is easiest to catch with a metadata-based policy script; keep parser as the only crate that declares `lightningcss`.
 - Baseline Rust CI should always keep five lanes alive (`check`, `lint`, `unit`, `integration`, `perf`) so later milestones have stable enforcement hooks.
+- Vue policy invariant: any `<style src>` block is warning+skip in v1, even if inline CSS is present in the same block.
