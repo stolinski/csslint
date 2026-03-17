@@ -54,6 +54,16 @@ Validation fixtures and check script:
 - `durationMs`: total run duration in milliseconds
 - `exitCode`: resolved process exit code (`0`, `1`, or `2`)
 
+## Exit Code Contract (Normative)
+
+`summary.exitCode` uses fixed v1 semantics:
+
+- `0`: lint run completed with no error-severity diagnostics and no runtime/config/internal failures.
+- `1`: lint run completed and found one or more error-severity diagnostics.
+- `2`: runtime/config/internal failure occurred.
+
+Precedence is strict: `2` overrides `1`, and `1` overrides `0`.
+
 ## `diagnostics[]`
 
 Each diagnostic object:

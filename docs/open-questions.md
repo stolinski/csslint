@@ -16,7 +16,7 @@ Track unresolved product and implementation decisions that affect v1 behavior.
 | Q-006 | Vue `<style module>` behavior | Treat `<style module>` and `<style module="name">` as scoped contexts for native scoped rules in v1 (`docs/vue-style-policy-v1.md`). |
 | Q-007 | Vue `<style src>` behavior | Emit a non-fatal warning and skip extraction for `<style src>` blocks in v1 (no external resolution) (`docs/vue-style-policy-v1.md`). |
 | Q-008 | `no_unused_scoped_selectors` confidence model | Defer from core v1 and implement via plugin surface with template-usage provider (`docs/plugin-surface-v1.md`). |
-| Q-009 | Exit-code precedence with mixed failures | Runtime/config/internal failure wins (`2`) over lint findings (`1`). |
+| Q-009 | Exit-code precedence with mixed failures | Runtime/config/internal failure wins (`2`) over lint findings (`1`) per `docs/json-output-schema-v1.md` and `docs/json-output-schema-v1.schema.json`. |
 | Q-010 | Template usage provider contract | Typed input/output/confidence contract documented in `docs/template-usage-provider-spec-v1.md`. |
 
 ## Open Questions
