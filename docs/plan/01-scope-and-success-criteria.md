@@ -20,6 +20,15 @@ Define exactly what v1 includes, what it intentionally excludes, and how we deci
 - PostCSS plugin ecosystem interoperability.
 - Deep template-aware dead selector analysis in core ruleset (deferred; plugin-surface candidate).
 
+## Scope Lock Contract (Normative)
+
+The following boundaries are hard-locked for v1 and cannot change without an explicit docs update in the same change:
+
+- In-scope: Rust-first architecture, Lightning CSS parser boundary, deterministic rule engine, safe `--fix`, JSON reporter contract (`schemaVersion: 1`), and first-class `.css`/`.vue`/`.svelte` style support.
+- Out-of-scope: SCSS/LESS parsing, full Stylelint compatibility, arbitrary JS plugins, PostCSS plugin interoperability, and deep template-aware unused selector detection in core defaults.
+
+Any proposed behavior outside this contract must be recorded in `docs/deferrals-v1.md` before implementation work starts.
+
 ## Rule Scope Contract
 
 Each rule must be tagged with one of:
@@ -40,6 +49,8 @@ Each rule must be tagged with one of:
 - `prefer_logical_properties` (`native`)
 - `no_global_leaks` (`native`)
 - `no_deprecated_features` (`native`, target-aware)
+
+Rule tags for these IDs are frozen for v1. Changing a tag requires updating both this file and `docs/rule-catalog-v1.md` in the same PR.
 
 ## Definition of "Target-Aware"
 
