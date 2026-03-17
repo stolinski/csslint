@@ -31,11 +31,11 @@ fn extractor_fixture_corpus_matches_expected_output() {
         let source = fs::read_to_string(&input_path)
             .unwrap_or_else(|error| panic!("failed to read {}: {error}", input_path.display()));
         let expected_path = case_dir.join("expected.json");
-        let expected: ExpectedCase = serde_json::from_str(
-            &fs::read_to_string(&expected_path)
-                .unwrap_or_else(|error| panic!("failed to read {}: {error}", expected_path.display())),
-        )
-        .unwrap_or_else(|error| panic!("failed to parse {}: {error}", expected_path.display()));
+        let expected: ExpectedCase =
+            serde_json::from_str(&fs::read_to_string(&expected_path).unwrap_or_else(|error| {
+                panic!("failed to read {}: {error}", expected_path.display())
+            }))
+            .unwrap_or_else(|error| panic!("failed to parse {}: {error}", expected_path.display()));
 
         let extracted = csslint_extractor::extract_styles(FileId::new(1), &input_path, &source);
 
@@ -91,7 +91,12 @@ fn extractor_fixture_corpus_matches_expected_output() {
 
             let source_slice = source
                 .get(actual.start_offset..actual.end_offset)
-                .unwrap_or_else(|| panic!("invalid offset mapping in {} style {index}", case_dir.display()));
+                .unwrap_or_else(|| {
+                    panic!(
+                        "invalid offset mapping in {} style {index}",
+                        case_dir.display()
+                    )
+                });
             assert_eq!(
                 source_slice,
                 actual.content,

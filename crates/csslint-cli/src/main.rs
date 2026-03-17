@@ -17,7 +17,7 @@ fn main() {
                 let semantic = csslint_semantic::build_semantic_model(&parsed);
                 diagnostics.extend(csslint_rules::run_rules(&semantic));
             }
-            Err(diagnostic) => diagnostics.push(diagnostic),
+            Err(diagnostic) => diagnostics.push(*diagnostic),
         }
     }
 

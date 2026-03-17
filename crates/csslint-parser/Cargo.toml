@@ -10,7 +10,7 @@ path = "src/lib.rs"
 [dependencies]
 csslint-core = { path = "../csslint-core" }
 csslint-extractor = { path = "../csslint-extractor" }
-lightningcss = { version = "1", optional = true }
+lightningcss = { version = "1.0.0-alpha.71", optional = true }
 
 [features]
 default = []

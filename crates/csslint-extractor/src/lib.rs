@@ -71,7 +71,11 @@ pub fn extract_styles(file_id: FileId, file_path: &Path, source: &str) -> Extrac
     extract_component_styles(file_id, source, framework)
 }
 
-fn extract_component_styles(file_id: FileId, source: &str, framework: FrameworkKind) -> ExtractionResult {
+fn extract_component_styles(
+    file_id: FileId,
+    source: &str,
+    framework: FrameworkKind,
+) -> ExtractionResult {
     let mut styles = Vec::new();
     let mut diagnostics = Vec::new();
     let mut cursor = 0;
@@ -245,7 +249,10 @@ fn parse_style_attributes(input: &str) -> StyleAttributes {
             continue;
         }
 
-        let key = input.get(key_start..index).unwrap_or("").to_ascii_lowercase();
+        let key = input
+            .get(key_start..index)
+            .unwrap_or("")
+            .to_ascii_lowercase();
 
         while index < bytes.len() && bytes[index].is_ascii_whitespace() {
             index += 1;
@@ -309,9 +316,7 @@ fn find_next_tag_start(bytes: &[u8], start: usize) -> Option<usize> {
 fn find_style_close(bytes: &[u8], start: usize) -> Option<usize> {
     let mut index = start;
     while index + STYLE_CLOSE_TAG.len() <= bytes.len() {
-        if bytes[index] == b'<'
-            && starts_with_ignore_ascii_case(&bytes[index..], STYLE_CLOSE_TAG)
-        {
+        if bytes[index] == b'<' && starts_with_ignore_ascii_case(&bytes[index..], STYLE_CLOSE_TAG) {
             return Some(index);
         }
         index += 1;
@@ -322,8 +327,7 @@ fn find_style_close(bytes: &[u8], start: usize) -> Option<usize> {
 fn find_script_close(bytes: &[u8], start: usize) -> Option<usize> {
     let mut index = start;
     while index + SCRIPT_CLOSE_TAG.len() <= bytes.len() {
-        if bytes[index] == b'<'
-            && starts_with_ignore_ascii_case(&bytes[index..], SCRIPT_CLOSE_TAG)
+        if bytes[index] == b'<' && starts_with_ignore_ascii_case(&bytes[index..], SCRIPT_CLOSE_TAG)
         {
             return Some(index);
         }
@@ -430,8 +434,14 @@ mod tests {
         assert_eq!(result.styles.len(), 2);
         assert_eq!(result.styles[0].block_index, 0);
         assert_eq!(result.styles[1].block_index, 1);
-        assert_eq!(slice_from_style(source, &result, 0), result.styles[0].content);
-        assert_eq!(slice_from_style(source, &result, 1), result.styles[1].content);
+        assert_eq!(
+            slice_from_style(source, &result, 0),
+            result.styles[0].content
+        );
+        assert_eq!(
+            slice_from_style(source, &result, 1),
+            result.styles[1].content
+        );
     }
 
     #[test]
@@ -441,7 +451,10 @@ mod tests {
 
         assert!(result.styles.is_empty());
         assert_eq!(result.diagnostics.len(), 1);
-        assert_eq!(result.diagnostics[0].rule_id.as_str(), "unsupported_external_style_src");
+        assert_eq!(
+            result.diagnostics[0].rule_id.as_str(),
+            "unsupported_external_style_src"
+        );
     }
 
     #[test]
@@ -451,7 +464,10 @@ mod tests {
 
         assert!(result.styles.is_empty());
         assert_eq!(result.diagnostics.len(), 1);
-        assert_eq!(result.diagnostics[0].rule_id.as_str(), "unsupported_style_lang");
+        assert_eq!(
+            result.diagnostics[0].rule_id.as_str(),
+            "unsupported_style_lang"
+        );
     }
 
     #[test]
@@ -480,7 +496,10 @@ mod tests {
 
         assert_eq!(result.styles.len(), 1);
         assert_eq!(result.styles[0].framework, FrameworkKind::Svelte);
-        assert_eq!(slice_from_style(source, &result, 0), result.styles[0].content);
+        assert_eq!(
+            slice_from_style(source, &result, 0),
+            result.styles[0].content
+        );
     }
 
     #[test]
@@ -490,7 +509,10 @@ mod tests {
 
         assert!(result.styles.is_empty());
         assert_eq!(result.diagnostics.len(), 1);
-        assert_eq!(result.diagnostics[0].rule_id.as_str(), "extractor_unclosed_script_tag");
+        assert_eq!(
+            result.diagnostics[0].rule_id.as_str(),
+            "extractor_unclosed_script_tag"
+        );
         assert_eq!(result.diagnostics[0].severity.as_str(), "warn");
     }
 

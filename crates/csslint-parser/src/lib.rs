@@ -11,15 +11,15 @@ pub struct ParsedStyle {
     pub scope: Scope,
 }
 
-pub fn parse_style(style: &ExtractedStyle) -> Result<ParsedStyle, Diagnostic> {
+pub fn parse_style(style: &ExtractedStyle) -> Result<ParsedStyle, Box<Diagnostic>> {
     if style.content.trim().is_empty() {
-        return Err(Diagnostic::new(
+        return Err(Box::new(Diagnostic::new(
             RuleId::from("parser_empty_input"),
             Severity::Error,
             "Style block is empty and cannot be parsed",
             style.span(),
             style.file_id,
-        ));
+        )));
     }
 
     Ok(ParsedStyle {

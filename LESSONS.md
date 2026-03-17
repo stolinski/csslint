@@ -11,3 +11,4 @@
 - Keep source mapping offset-first: compute global spans with `start_offset + local_offset`, then convert offsets to line/column with a prebuilt LF/CRLF line index.
 - Fixture corpus should assert both block order and `source[start_offset..end_offset] == content` to catch offset regressions immediately.
 - Malformed reliability needs explicit script handling too: missing `</script>` should emit a controlled warning and halt extraction safely.
+- `lightningcss` currently resolves as prerelease on crates.io, so parser dependency must pin an explicit alpha version (for example `1.0.0-alpha.71`) instead of `1`.

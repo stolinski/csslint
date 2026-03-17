@@ -43,13 +43,20 @@ fn malformed_fixture_files() -> Vec<PathBuf> {
         .join("../..")
         .join("tests/native/extractor-malformed");
     let mut files = fs::read_dir(&root)
-        .unwrap_or_else(|error| panic!("failed to read malformed fixture root {}: {error}", root.display()))
+        .unwrap_or_else(|error| {
+            panic!(
+                "failed to read malformed fixture root {}: {error}",
+                root.display()
+            )
+        })
         .filter_map(Result::ok)
         .map(|entry| entry.path())
         .filter(|path| {
             path.extension()
                 .and_then(|ext| ext.to_str())
-                .is_some_and(|ext| ext.eq_ignore_ascii_case("vue") || ext.eq_ignore_ascii_case("svelte"))
+                .is_some_and(|ext| {
+                    ext.eq_ignore_ascii_case("vue") || ext.eq_ignore_ascii_case("svelte")
+                })
         })
         .collect::<Vec<_>>();
     files.sort();

@@ -9,7 +9,8 @@ fn perf_smoke_pipeline_runs() {
     let started = Instant::now();
 
     for _ in 0..100 {
-        let extraction = csslint_extractor::extract_styles(FileId::new(1), Path::new("perf.css"), source);
+        let extraction =
+            csslint_extractor::extract_styles(FileId::new(1), Path::new("perf.css"), source);
         for style in &extraction.styles {
             let parsed = csslint_parser::parse_style(style).expect("parse should succeed");
             let semantic = csslint_semantic::build_semantic_model(&parsed);
