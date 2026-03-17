@@ -6,3 +6,6 @@ publish = false
 
 [lib]
 path = "src/lib.rs"
+
+[dependencies]
+csslint-core = { path = "../csslint-core" }

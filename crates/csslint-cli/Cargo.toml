@@ -7,3 +7,12 @@ publish = false
 [[bin]]
 name = "csslint"
 path = "src/main.rs"
+
+[dependencies]
+csslint-config = { path = "../csslint-config" }
+csslint-core = { path = "../csslint-core" }
+csslint-extractor = { path = "../csslint-extractor" }
+csslint-fix = { path = "../csslint-fix" }
+csslint-parser = { path = "../csslint-parser" }
+csslint-rules = { path = "../csslint-rules" }
+csslint-semantic = { path = "../csslint-semantic" }
