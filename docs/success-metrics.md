@@ -61,6 +61,16 @@ Derived comparative metrics:
 
 ## CI Gates
 
+Every release gate has an owning CI lane and a blocking policy. A release candidate is shippable only when all lanes below are green.
+
+| Gate | Owning lane | Blocking criteria | Required artifact(s) |
+| --- | --- | --- | --- |
+| Core correctness | `correctness` | Rule tests, mapping checks, fix safety checks, malformed-input reliability checks all pass | test logs and summary report |
+| Compatibility | `compat` | Harness runs selected imported suites, reports pass/skip/fail, and does not regress without documented deferral/divergence | `artifacts/compat/compat-summary.json` |
+| Framework native | `framework` | Vue/Svelte native suite passes with scoped behavior and mapping assertions | framework suite results |
+| Performance | `perf` | Benchmark executes and does not exceed median runtime or peak memory regression budgets (>20%) unless explicitly accepted | `artifacts/perf/perf-summary.json`, `artifacts/perf/perf-summary.md` |
+| Determinism | `determinism` | Repeat-run diagnostics/fixes are byte-for-byte identical for the same inputs/config | determinism diff report (empty or pass marker) |
+
 ## Correctness Gates (Blocking)
 
 - Determinism suite green (identical diagnostics/fixes across repeat runs).
