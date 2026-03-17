@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 
-import json
-import subprocess
 import sys
+import tomllib
 from pathlib import Path
 
 
@@ -35,29 +34,6 @@ ALLOWED_INTERNAL_DEPS = {
     },
     "csslint-plugin-api": {"csslint-core"},
 }
-
-
-def cargo_metadata(repo_root: Path) -> dict:
-    try:
-        completed = subprocess.run(
-            ["cargo", "metadata", "--format-version", "1"],
-            cwd=repo_root,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-    except FileNotFoundError as error:
-        print(
-            "cargo not found in PATH; install Rust toolchain before running dependency checks",
-            file=sys.stderr,
-        )
-        raise SystemExit(2) from error
-
-    if completed.returncode != 0:
-        print(completed.stderr.strip() or "failed to run cargo metadata", file=sys.stderr)
-        raise SystemExit(completed.returncode)
-
-    return json.loads(completed.stdout)
 
 
 def detect_cycle(graph: dict[str, set[str]]) -> list[str] | None:
@@ -93,15 +69,39 @@ def detect_cycle(graph: dict[str, set[str]]) -> list[str] | None:
     return None
 
 
+def extract_dep_names(section: object) -> set[str]:
+    if not isinstance(section, dict):
+        return set()
+    return {name for name in section.keys() if isinstance(name, str)}
+
+
+def load_workspace_manifests(repo_root: Path) -> dict[str, dict[str, object]]:
+    crates_dir = repo_root / "crates"
+    manifests = sorted(crates_dir.glob("*/Cargo.toml"))
+    crates: dict[str, dict[str, object]] = {}
+
+    for manifest in manifests:
+        parsed = tomllib.loads(manifest.read_text(encoding="utf-8"))
+        package = parsed.get("package")
+        if not isinstance(package, dict):
+            continue
+
+        crate_name = package.get("name")
+        if not isinstance(crate_name, str) or not crate_name.startswith("csslint-"):
+            continue
+
+        deps = extract_dep_names(parsed.get("dependencies"))
+        crates[crate_name] = {
+            "manifest": manifest,
+            "dependencies": deps,
+        }
+
+    return crates
+
+
 def main() -> int:
     repo_root = Path(__file__).resolve().parents[1]
-    metadata = cargo_metadata(repo_root)
-
-    packages = {
-        package["name"]: package
-        for package in metadata["packages"]
-        if package["name"].startswith("csslint-")
-    }
+    packages = load_workspace_manifests(repo_root)
 
     errors: list[str] = []
     for crate_name in sorted(packages):
@@ -113,13 +113,17 @@ def main() -> int:
             errors.append(f"Expected crate '{crate_name}' is missing from workspace")
 
     graph: dict[str, set[str]] = {}
-    for crate_name, package in packages.items():
-        internal_deps = {
-            dep["name"]
-            for dep in package["dependencies"]
-            if dep["name"].startswith("csslint-")
-        }
+    lightning_dependents: list[str] = []
+    for crate_name, package_data in packages.items():
+        deps = package_data["dependencies"]
+        if not isinstance(deps, set):
+            continue
+
+        internal_deps = {name for name in deps if name.startswith("csslint-")}
         graph[crate_name] = internal_deps
+
+        if "lightningcss" in deps:
+            lightning_dependents.append(crate_name)
 
         allowed = ALLOWED_INTERNAL_DEPS.get(crate_name, set())
         for dep_name in sorted(internal_deps):
@@ -132,16 +136,10 @@ def main() -> int:
     if cycle is not None:
         errors.append("Internal dependency cycle detected: " + " -> ".join(cycle))
 
-    lightning_dependents = sorted(
-        crate_name
-        for crate_name, package in packages.items()
-        if any(dep["name"] == "lightningcss" for dep in package["dependencies"])
-    )
-
     if "csslint-parser" not in lightning_dependents:
         errors.append("csslint-parser must declare the lightningcss dependency")
 
-    for crate_name in lightning_dependents:
+    for crate_name in sorted(lightning_dependents):
         if crate_name != "csslint-parser":
             errors.append(
                 f"Only csslint-parser may depend on lightningcss (found in {crate_name})"

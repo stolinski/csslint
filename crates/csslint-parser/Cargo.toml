@@ -13,5 +13,5 @@ csslint-extractor = { path = "../csslint-extractor" }
 lightningcss = { version = "1.0.0-alpha.71", optional = true }
 
 [features]
-default = []
+default = ["lightning"]
 lightning = ["dep:lightningcss"]
