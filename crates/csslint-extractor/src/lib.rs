@@ -84,9 +84,23 @@ fn extract_component_styles(file_id: FileId, source: &str, framework: FrameworkK
 
         if is_open_tag(bytes, tag_start, b"script") {
             let Some(script_open_end) = find_tag_end(bytes, tag_start + 7) else {
+                diagnostics.push(Diagnostic::new(
+                    RuleId::from("extractor_unclosed_script_tag"),
+                    Severity::Warn,
+                    "Unclosed <script> opening tag",
+                    Span::new(tag_start, bytes.len()),
+                    file_id,
+                ));
                 break;
             };
             let Some(script_close_start) = find_script_close(bytes, script_open_end + 1) else {
+                diagnostics.push(Diagnostic::new(
+                    RuleId::from("extractor_unclosed_script_tag"),
+                    Severity::Warn,
+                    "Missing </script> closing tag",
+                    Span::new(tag_start, script_open_end + 1),
+                    file_id,
+                ));
                 break;
             };
             cursor = script_close_start + SCRIPT_CLOSE_TAG.len();
@@ -467,6 +481,17 @@ mod tests {
         assert_eq!(result.styles.len(), 1);
         assert_eq!(result.styles[0].framework, FrameworkKind::Svelte);
         assert_eq!(slice_from_style(source, &result, 0), result.styles[0].content);
+    }
+
+    #[test]
+    fn reports_missing_script_close_as_controlled_warning() {
+        let source = "<script>const css = '<style>.fake { color: red; }</style>';\n<style>.real { color: blue; }</style>";
+        let result = extract_styles(FileId::new(20), Path::new("Comp.vue"), source);
+
+        assert!(result.styles.is_empty());
+        assert_eq!(result.diagnostics.len(), 1);
+        assert_eq!(result.diagnostics[0].rule_id.as_str(), "extractor_unclosed_script_tag");
+        assert_eq!(result.diagnostics[0].severity.as_str(), "warn");
     }
 
     fn slice_from_style(source: &str, result: &ExtractionResult, index: usize) -> String {
