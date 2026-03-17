@@ -9,3 +9,4 @@
 - Baseline Rust CI should always keep five lanes alive (`check`, `lint`, `unit`, `integration`, `perf`) so later milestones have stable enforcement hooks.
 - Vue policy invariant: any `<style src>` block is warning+skip in v1, even if inline CSS is present in the same block.
 - Keep source mapping offset-first: compute global spans with `start_offset + local_offset`, then convert offsets to line/column with a prebuilt LF/CRLF line index.
+- Fixture corpus should assert both block order and `source[start_offset..end_offset] == content` to catch offset regressions immediately.

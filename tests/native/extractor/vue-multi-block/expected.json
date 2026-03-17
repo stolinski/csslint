@@ -1,0 +1,17 @@
+{
+  "styles": [
+    {
+      "framework": "vue",
+      "scoped": true,
+      "module": false,
+      "content": ".a { color: red; }"
+    },
+    {
+      "framework": "vue",
+      "scoped": false,
+      "module": true,
+      "content": ".b { color: blue; }"
+    }
+  ],
+  "diagnostics": []
+}

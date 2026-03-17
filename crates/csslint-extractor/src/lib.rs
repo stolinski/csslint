@@ -77,7 +77,28 @@ fn extract_component_styles(file_id: FileId, source: &str, framework: FrameworkK
     let mut cursor = 0;
     let bytes = source.as_bytes();
 
-    while let Some(open_start) = find_style_open(bytes, cursor) {
+    while cursor < bytes.len() {
+        let Some(tag_start) = find_next_tag_start(bytes, cursor) else {
+            break;
+        };
+
+        if is_open_tag(bytes, tag_start, b"script") {
+            let Some(script_open_end) = find_tag_end(bytes, tag_start + 7) else {
+                break;
+            };
+            let Some(script_close_start) = find_script_close(bytes, script_open_end + 1) else {
+                break;
+            };
+            cursor = script_close_start + SCRIPT_CLOSE_TAG.len();
+            continue;
+        }
+
+        if !is_open_tag(bytes, tag_start, b"style") {
+            cursor = tag_start + 1;
+            continue;
+        }
+
+        let open_start = tag_start;
         let Some(open_end) = find_tag_end(bytes, open_start + 6) else {
             diagnostics.push(Diagnostic::new(
                 RuleId::from("extractor_unclosed_style_tag"),
@@ -159,6 +180,7 @@ fn extract_component_styles(file_id: FileId, source: &str, framework: FrameworkK
 }
 
 const STYLE_CLOSE_TAG: &[u8] = b"</style>";
+const SCRIPT_CLOSE_TAG: &[u8] = b"</script>";
 
 fn scope_for(framework: FrameworkKind, scoped: bool, module: bool) -> Scope {
     match framework {
@@ -262,18 +284,12 @@ fn parse_style_attributes(input: &str) -> StyleAttributes {
     }
 }
 
-fn find_style_open(bytes: &[u8], start: usize) -> Option<usize> {
-    let mut index = start;
-    while index + 6 <= bytes.len() {
-        if bytes[index] == b'<' && starts_with_ignore_ascii_case(&bytes[index..], b"<style") {
-            let boundary = bytes.get(index + 6).copied();
-            if boundary.map(is_style_boundary).unwrap_or(true) {
-                return Some(index);
-            }
-        }
-        index += 1;
-    }
-    None
+fn find_next_tag_start(bytes: &[u8], start: usize) -> Option<usize> {
+    bytes
+        .iter()
+        .enumerate()
+        .skip(start)
+        .find_map(|(index, byte)| (*byte == b'<').then_some(index))
 }
 
 fn find_style_close(bytes: &[u8], start: usize) -> Option<usize> {
@@ -287,6 +303,43 @@ fn find_style_close(bytes: &[u8], start: usize) -> Option<usize> {
         index += 1;
     }
     None
+}
+
+fn find_script_close(bytes: &[u8], start: usize) -> Option<usize> {
+    let mut index = start;
+    while index + SCRIPT_CLOSE_TAG.len() <= bytes.len() {
+        if bytes[index] == b'<'
+            && starts_with_ignore_ascii_case(&bytes[index..], SCRIPT_CLOSE_TAG)
+        {
+            return Some(index);
+        }
+        index += 1;
+    }
+    None
+}
+
+fn is_open_tag(bytes: &[u8], index: usize, tag_name: &[u8]) -> bool {
+    if bytes.get(index) != Some(&b'<') {
+        return false;
+    }
+
+    let tag_end = index + 1 + tag_name.len();
+    if tag_end > bytes.len() {
+        return false;
+    }
+
+    for (offset, expected) in tag_name.iter().enumerate() {
+        if !bytes[index + 1 + offset].eq_ignore_ascii_case(expected) {
+            return false;
+        }
+    }
+
+    let boundary = bytes.get(tag_end).copied();
+    if !boundary.map(is_style_boundary).unwrap_or(true) {
+        return false;
+    }
+
+    true
 }
 
 fn find_tag_end(bytes: &[u8], mut index: usize) -> Option<usize> {
@@ -395,6 +448,15 @@ mod tests {
         assert_eq!(result.styles.len(), 2);
         assert!(result.styles[0].module);
         assert!(result.styles[1].module);
+    }
+
+    #[test]
+    fn ignores_style_like_text_inside_script_blocks() {
+        let source = "<script>const css = '<style>.fake { color: red; }</style>';</script>\n<style>.real { color: blue; }</style>";
+        let result = extract_styles(FileId::new(12), Path::new("Comp.vue"), source);
+
+        assert_eq!(result.styles.len(), 1);
+        assert!(result.styles[0].content.contains(".real"));
     }
 
     #[test]

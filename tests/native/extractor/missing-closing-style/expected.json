@@ -1,0 +1,9 @@
+{
+  "styles": [],
+  "diagnostics": [
+    {
+      "rule_id": "extractor_unclosed_style_tag",
+      "severity": "warn"
+    }
+  ]
+}

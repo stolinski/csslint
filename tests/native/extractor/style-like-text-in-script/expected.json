@@ -1,0 +1,11 @@
+{
+  "styles": [
+    {
+      "framework": "vue",
+      "scoped": false,
+      "module": false,
+      "content": ".real { color: blue; }"
+    }
+  ],
+  "diagnostics": []
+}

@@ -1,0 +1,11 @@
+{
+  "styles": [
+    {
+      "framework": "svelte",
+      "scoped": false,
+      "module": false,
+      "content": ".title { font-size: 2rem; }"
+    }
+  ],
+  "diagnostics": []
+}
