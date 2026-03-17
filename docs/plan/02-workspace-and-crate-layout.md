@@ -106,6 +106,10 @@ Rules:
 - `csslint-parser` should be the only crate that directly touches Lightning parser APIs.
 - No cyclic internal dependencies.
 
+Enforcement command:
+
+- `python3 scripts/check_internal_deps.py`
+
 ## Core Type Contracts
 
 The following types must be defined in `csslint-core` and reused everywhere:
