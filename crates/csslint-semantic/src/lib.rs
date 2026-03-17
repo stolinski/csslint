@@ -1,6 +1,6 @@
 #![forbid(unsafe_code)]
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use csslint_core::{map_local_span_to_global, FileId, Scope, Span};
 use csslint_parser::ParsedStyle;
@@ -145,11 +145,17 @@ pub fn build_semantic_model(parsed: &ParsedStyle) -> CssSemanticModel {
                         .push(selector_id);
                 }
 
-                indexes
-                    .selectors_by_scope
-                    .entry(parsed.scope)
-                    .or_default()
-                    .push(selector_id);
+                let selector_scopes = parts
+                    .iter()
+                    .map(|part| part.scope)
+                    .collect::<BTreeSet<_>>();
+                for selector_scope in selector_scopes {
+                    indexes
+                        .selectors_by_scope
+                        .entry(selector_scope)
+                        .or_default()
+                        .push(selector_id);
+                }
                 indexes
                     .selectors_by_normalized
                     .entry(normalized)
@@ -411,14 +417,75 @@ fn should_emit_space(current: &str, next: char) -> bool {
 }
 
 fn selector_parts(raw: &str, scope: Scope) -> Vec<SelectorPart> {
-    raw.split_whitespace()
-        .filter(|part| !part.is_empty())
-        .map(|part| SelectorPart {
-            value: part.to_string(),
-            kind: selector_part_kind(part),
-            scope,
-        })
-        .collect()
+    let mut parts = Vec::new();
+    for token in raw.split_whitespace().filter(|part| !part.is_empty()) {
+        parts.extend(parts_for_token(token, scope));
+    }
+
+    parts
+}
+
+fn parts_for_token(token: &str, default_scope: Scope) -> Vec<SelectorPart> {
+    let mut parts = Vec::new();
+    let mut cursor = token;
+
+    while let Some(global_start) = cursor.find(":global(") {
+        let prefix = cursor.get(..global_start).unwrap_or("");
+        if !prefix.is_empty() {
+            parts.push(SelectorPart {
+                value: prefix.to_string(),
+                kind: selector_part_kind(prefix),
+                scope: default_scope,
+            });
+        }
+
+        let global_expr = cursor.get(global_start + 8..).unwrap_or("");
+        let Some(global_end) = find_closing_paren(global_expr) else {
+            parts.push(SelectorPart {
+                value: cursor.to_string(),
+                kind: selector_part_kind(cursor),
+                scope: default_scope,
+            });
+            return parts;
+        };
+
+        let global_value = global_expr.get(0..global_end).unwrap_or("").trim();
+        if !global_value.is_empty() {
+            parts.push(SelectorPart {
+                value: global_value.to_string(),
+                kind: selector_part_kind(global_value),
+                scope: Scope::Global,
+            });
+        }
+
+        cursor = global_expr.get(global_end + 1..).unwrap_or("");
+    }
+
+    if !cursor.is_empty() {
+        parts.push(SelectorPart {
+            value: cursor.to_string(),
+            kind: selector_part_kind(cursor),
+            scope: default_scope,
+        });
+    }
+
+    parts
+}
+
+fn find_closing_paren(input: &str) -> Option<usize> {
+    let mut depth = 1usize;
+    for (index, current) in input.char_indices() {
+        if current == '(' {
+            depth += 1;
+        } else if current == ')' {
+            depth -= 1;
+            if depth == 0 {
+                return Some(index);
+            }
+        }
+    }
+
+    None
 }
 
 fn selector_part_kind(part: &str) -> SelectorPartKind {
@@ -616,5 +683,26 @@ mod tests {
             super::normalize_selector(".icon\\+name   +   a"),
             ".icon\\+name + a"
         );
+    }
+
+    #[test]
+    fn applies_scope_defaults_and_global_overrides() {
+        let parsed = ParsedStyle {
+            content: ".foo :global(.bar) .baz { color: red; }".to_string(),
+            span: Span::new(0, 38),
+            file_id: FileId::new(4),
+            scope: Scope::VueScoped,
+            parsed_with_lightning: true,
+        };
+
+        let semantic = build_semantic_model(&parsed);
+        let selector = &semantic.selectors[0];
+        let scopes = selector.parts.iter().map(|part| part.scope).collect::<Vec<_>>();
+        assert_eq!(
+            scopes,
+            vec![Scope::VueScoped, Scope::Global, Scope::VueScoped]
+        );
+        assert_eq!(semantic.indexes.selectors_by_scope[&Scope::VueScoped].len(), 1);
+        assert_eq!(semantic.indexes.selectors_by_scope[&Scope::Global].len(), 1);
     }
 }
