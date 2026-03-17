@@ -1,0 +1,14 @@
+[workspace]
+resolver = "2"
+members = [
+  "crates/csslint-core",
+  "crates/csslint-extractor",
+  "crates/csslint-parser",
+  "crates/csslint-semantic",
+  "crates/csslint-rules",
+  "crates/csslint-plugin-api",
+  "crates/csslint-fix",
+  "crates/csslint-config",
+  "crates/csslint-cli",
+  "crates/csslint-test-harness",
+]
