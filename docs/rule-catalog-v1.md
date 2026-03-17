@@ -23,6 +23,8 @@ This file is the source of truth for config defaults.
 
 ## Presets
 
+Preset maps in this file are canonical for v1. CLI/config implementations must expand presets to explicit per-rule entries using the exact rule ID set and key ordering shown here.
+
 ## `recommended` (default)
 
 Balanced defaults focused on low-noise adoption.
@@ -81,6 +83,16 @@ High-confidence essentials for low-friction adoption.
 - Allowed values are `off`, `warn`, `error`.
 - Unknown rule IDs are config errors.
 - Invalid severity values are config errors.
+
+## Preset Expansion Contract
+
+To keep output deterministic and avoid config drift, preset handling follows these rules:
+
+1. Expand `recommended`, `strict`, or `minimal` into explicit rule maps exactly as listed in this document.
+2. Apply user `rules` overrides after preset expansion.
+3. Reject unknown rule IDs with a `config_error` (do not silently ignore).
+4. Reject severities outside `off|warn|error` with a `config_error`.
+5. Preserve deterministic emission order by canonical rule ID order from the table above.
 
 ## Per-Rule Specs
 
