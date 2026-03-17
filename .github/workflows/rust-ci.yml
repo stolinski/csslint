@@ -1,0 +1,100 @@
+name: Rust CI
+
+on:
+  pull_request:
+    paths:
+      - Cargo.toml
+      - rust-toolchain.toml
+      - crates/**
+      - scripts/check_internal_deps.py
+      - .github/workflows/rust-ci.yml
+  push:
+    branches:
+      - main
+    paths:
+      - Cargo.toml
+      - rust-toolchain.toml
+      - crates/**
+      - scripts/check_internal_deps.py
+      - .github/workflows/rust-ci.yml
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.82.0
+
+      - name: Cargo check workspace
+        run: cargo check --workspace
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.82.0
+          components: rustfmt, clippy
+
+      - name: Cargo fmt check
+        run: cargo fmt --all --check
+
+      - name: Cargo clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Enforce internal dependency policy
+        run: python3 scripts/check_internal_deps.py
+
+  unit:
+    runs-on: ubuntu-latest
+    needs: [check]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.82.0
+
+      - name: Run unit tests
+        run: cargo test --workspace --lib
+
+  integration:
+    runs-on: ubuntu-latest
+    needs: [check]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.82.0
+
+      - name: Run integration smoke suite
+        run: cargo test -p csslint-test-harness --test smoke_pipeline
+
+  perf:
+    runs-on: ubuntu-latest
+    needs: [check]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.82.0
+
+      - name: Run perf smoke suite
+        run: cargo test -p csslint-test-harness --test perf_smoke

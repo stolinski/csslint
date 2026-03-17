@@ -6,3 +6,4 @@
 - Release gates are not complete until each one names a concrete CI lane, blocking condition, and expected artifact.
 - Keeping `RuleId` as a shared core type (instead of per-crate strings) prevents conversion shims and keeps config/rules/reporting contracts aligned.
 - Dependency direction drift is easiest to catch with a metadata-based policy script; keep parser as the only crate that declares `lightningcss`.
+- Baseline Rust CI should always keep five lanes alive (`check`, `lint`, `unit`, `integration`, `perf`) so later milestones have stable enforcement hooks.

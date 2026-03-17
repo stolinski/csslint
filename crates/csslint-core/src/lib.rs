@@ -155,3 +155,20 @@ impl Diagnostic {
         self
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{Severity, Span};
+
+    #[test]
+    fn span_len_is_non_negative() {
+        let span = Span::new(10, 4);
+        assert_eq!(span.len(), 0);
+    }
+
+    #[test]
+    fn severity_off_does_not_emit() {
+        assert!(!Severity::Off.emits_diagnostic());
+        assert!(Severity::Warn.emits_diagnostic());
+    }
+}
