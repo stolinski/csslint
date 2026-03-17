@@ -36,6 +36,66 @@ impl Span {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LineIndex {
+    line_starts: Vec<usize>,
+    source_len: usize,
+}
+
+impl LineIndex {
+    pub fn new(source: &str) -> Self {
+        let bytes = source.as_bytes();
+        let mut line_starts = vec![0];
+        let mut index = 0;
+
+        while index < bytes.len() {
+            match bytes[index] {
+                b'\r' => {
+                    if bytes.get(index + 1) == Some(&b'\n') {
+                        line_starts.push(index + 2);
+                        index += 2;
+                    } else {
+                        line_starts.push(index + 1);
+                        index += 1;
+                    }
+                }
+                b'\n' => {
+                    line_starts.push(index + 1);
+                    index += 1;
+                }
+                _ => {
+                    index += 1;
+                }
+            }
+        }
+
+        Self {
+            line_starts,
+            source_len: bytes.len(),
+        }
+    }
+
+    pub fn line_starts(&self) -> &[usize] {
+        &self.line_starts
+    }
+
+    pub fn offset_to_line_column(&self, offset: usize) -> (usize, usize) {
+        let clamped = offset.min(self.source_len);
+        let line_index = match self.line_starts.binary_search(&clamped) {
+            Ok(index) => index,
+            Err(0) => 0,
+            Err(index) => index - 1,
+        };
+
+        let line_start = self.line_starts[line_index];
+        (line_index + 1, clamped - line_start + 1)
+    }
+}
+
+pub const fn map_local_span_to_global(start_offset: usize, local: Span) -> Span {
+    Span::new(start_offset + local.start, start_offset + local.end)
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct RuleId(Cow<'static, str>);
 
@@ -158,7 +218,7 @@ impl Diagnostic {
 
 #[cfg(test)]
 mod tests {
-    use super::{Severity, Span};
+    use super::{map_local_span_to_global, LineIndex, Severity, Span};
 
     #[test]
     fn span_len_is_non_negative() {
@@ -170,5 +230,35 @@ mod tests {
     fn severity_off_does_not_emit() {
         assert!(!Severity::Off.emits_diagnostic());
         assert!(Severity::Warn.emits_diagnostic());
+    }
+
+    #[test]
+    fn line_index_maps_lf_offsets() {
+        let index = LineIndex::new("a\nbc\n");
+
+        assert_eq!(index.line_starts(), &[0, 2, 5]);
+        assert_eq!(index.offset_to_line_column(0), (1, 1));
+        assert_eq!(index.offset_to_line_column(2), (2, 1));
+        assert_eq!(index.offset_to_line_column(4), (2, 3));
+        assert_eq!(index.offset_to_line_column(5), (3, 1));
+    }
+
+    #[test]
+    fn line_index_maps_crlf_offsets() {
+        let index = LineIndex::new("a\r\nbc\r\nz");
+
+        assert_eq!(index.line_starts(), &[0, 3, 7]);
+        assert_eq!(index.offset_to_line_column(3), (2, 1));
+        assert_eq!(index.offset_to_line_column(6), (2, 4));
+        assert_eq!(index.offset_to_line_column(7), (3, 1));
+    }
+
+    #[test]
+    fn maps_local_spans_to_global_offsets() {
+        let local = Span::new(3, 8);
+        let global = map_local_span_to_global(40, local);
+
+        assert_eq!(global.start, 43);
+        assert_eq!(global.end, 48);
     }
 }
