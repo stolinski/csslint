@@ -8,18 +8,18 @@ pub struct SemanticStyle {
     pub file_id: FileId,
     pub span: Span,
     pub scope: Scope,
-    pub source: String,
+    pub content: String,
     pub declaration_count: usize,
 }
 
 pub fn build_semantic_model(parsed: &ParsedStyle) -> SemanticStyle {
-    let declaration_count = parsed.source.matches(':').count();
+    let declaration_count = parsed.content.matches(':').count();
 
     SemanticStyle {
         file_id: parsed.file_id,
         span: parsed.span,
         scope: parsed.scope,
-        source: parsed.source.clone(),
+        content: parsed.content.clone(),
         declaration_count,
     }
 }

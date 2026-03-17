@@ -8,10 +8,10 @@ fn main() {
     let _config = csslint_config::Config::default();
     let file_id = FileId::new(0);
     let source = ".btn {}";
-    let extracted = csslint_extractor::extract_styles(file_id, Path::new("stdin.css"), source);
+    let extraction = csslint_extractor::extract_styles(file_id, Path::new("stdin.css"), source);
 
-    let mut diagnostics = Vec::new();
-    for style in &extracted {
+    let mut diagnostics = extraction.diagnostics;
+    for style in &extraction.styles {
         match csslint_parser::parse_style(style) {
             Ok(parsed) => {
                 let semantic = csslint_semantic::build_semantic_model(&parsed);

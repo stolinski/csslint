@@ -4,7 +4,7 @@ use csslint_core::{Diagnostic, RuleId, Severity};
 use csslint_semantic::SemanticStyle;
 
 pub fn run_rules(semantic: &SemanticStyle) -> Vec<Diagnostic> {
-    let has_empty_block = semantic.source.contains("{}") || semantic.source.contains("{ }");
+    let has_empty_block = semantic.content.contains("{}") || semantic.content.contains("{ }");
     if !has_empty_block {
         return Vec::new();
     }
