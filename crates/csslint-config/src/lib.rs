@@ -34,7 +34,9 @@ pub fn parse_severity(raw: &str) -> Result<Severity, String> {
         "off" => Ok(Severity::Off),
         "warn" => Ok(Severity::Warn),
         "error" => Ok(Severity::Error),
-        _ => Err(format!("Invalid severity '{raw}'. Expected off, warn, or error.")),
+        _ => Err(format!(
+            "Invalid severity '{raw}'. Expected off, warn, or error."
+        )),
     }
 }
 

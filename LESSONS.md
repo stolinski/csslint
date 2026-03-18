@@ -21,3 +21,4 @@
 - For single-pass engines, instantiate active rules first, then precompute event subscriber lists so semantic nodes are traversed once per node type.
 - Treat config validation as a preflight step: unknown rule IDs should short-circuit before traversal, while severity overrides are applied at rule instantiation.
 - Deterministic merges are easier to maintain with a single shared sorter utility (file id/path, span, severity, rule id, message) used by both per-file and cross-file aggregation.
+- Panic containment should disable only the failing rule instance for the current file and emit an internal error diagnostic, while other rules continue dispatching.

@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::panic::{self, AssertUnwindSafe};
 
 use csslint_config::Config;
 use csslint_core::{Diagnostic, FileId, RuleId, Severity, Span};
@@ -51,6 +52,122 @@ pub trait Rule: Send + Sync {
     fn create(&self, ctx: RuleContext<'_>) -> RuleVisitor;
 }
 
+pub trait RulePack {
+    fn id(&self) -> &'static str;
+    fn register(&self, registry: &mut RuleRegistry);
+}
+
+pub fn register_rule_pack<P: RulePack>(registry: &mut RuleRegistry, pack: &P) {
+    pack.register(registry);
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ProviderFrameworkKind {
+    Vue,
+    Svelte,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ProviderStatus {
+    Complete,
+    Partial,
+    FailedRecoverable,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum UsageKind {
+    Class,
+    Id,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Confidence {
+    High,
+    Medium,
+    Low,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum UsageSource {
+    StaticAttribute,
+    FrameworkDirectiveLiteral,
+    BindingLiteralBranch,
+    DynamicExpressionHeuristic,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UsageFact {
+    pub kind: UsageKind,
+    pub name: String,
+    pub confidence: Confidence,
+    pub source: UsageSource,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProviderDiagnostic {
+    pub message: String,
+    pub span: Option<Span>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TemplateUsageOutput {
+    pub status: ProviderStatus,
+    pub facts: Vec<UsageFact>,
+    pub unknown_regions: Vec<Span>,
+    pub diagnostics: Vec<ProviderDiagnostic>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StyleBlockRef {
+    pub block_index: u32,
+    pub start_offset: usize,
+    pub end_offset: usize,
+    pub scoped: bool,
+    pub module: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TemplateUsageInput {
+    pub file_id: FileId,
+    pub file_path: String,
+    pub framework: ProviderFrameworkKind,
+    pub source: String,
+    pub styles: Vec<StyleBlockRef>,
+}
+
+pub trait UsageProvider: Send + Sync {
+    fn id(&self) -> &'static str;
+    fn collect(&self, input: &TemplateUsageInput) -> TemplateUsageOutput;
+}
+
+#[derive(Default)]
+pub struct UsageProviderRegistry {
+    providers: BTreeMap<&'static str, Box<dyn UsageProvider>>,
+}
+
+impl UsageProviderRegistry {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn register<P>(&mut self, provider: P) -> Result<(), String>
+    where
+        P: UsageProvider + 'static,
+    {
+        let id = provider.id();
+        if self.providers.contains_key(id) {
+            return Err(format!("duplicate usage provider registration: {id}"));
+        }
+        self.providers.insert(id, Box::new(provider));
+        Ok(())
+    }
+
+    pub fn get(&self, id: &str) -> Option<&dyn UsageProvider> {
+        self.providers.get(id).map(|provider| provider.as_ref())
+    }
+}
+
 pub struct RuleRuntimeCtx {
     file_id: FileId,
     rule_id: RuleId,
@@ -84,6 +201,16 @@ impl RuleRuntimeCtx {
 
     pub fn into_diagnostics(self) -> Vec<Diagnostic> {
         self.diagnostics
+    }
+
+    fn report_rule_runtime_failure(&mut self, message: impl Into<String>, span: Span) {
+        self.diagnostics.push(Diagnostic::new(
+            self.rule_id.clone(),
+            Severity::Error,
+            message,
+            span,
+            self.file_id,
+        ));
     }
 }
 
@@ -187,15 +314,13 @@ fn run_with_registry(
             continue;
         }
 
-        let visitor = rule.create(RuleContext {
-            semantic,
-            severity,
-        });
+        let visitor = rule.create(RuleContext { semantic, severity });
         active_rules.push(ActiveRule {
             on_selector: visitor.on_selector,
             on_declaration: visitor.on_declaration,
             on_rule: visitor.on_rule,
             runtime: RuleRuntimeCtx::new(semantic.file_id, meta.id, severity),
+            failed: false,
         });
     }
 
@@ -226,22 +351,61 @@ fn run_with_registry(
 
     for node in &semantic.rules {
         for subscriber in &rule_subscribers {
-            let runtime = &mut active_rules[subscriber.rule_index].runtime;
-            (subscriber.callback)(node, runtime);
+            let active_rule = &mut active_rules[subscriber.rule_index];
+            if active_rule.failed {
+                continue;
+            }
+
+            let result = panic::catch_unwind(AssertUnwindSafe(|| {
+                (subscriber.callback)(node, &mut active_rule.runtime)
+            }));
+            if result.is_err() {
+                active_rule.failed = true;
+                active_rule.runtime.report_rule_runtime_failure(
+                    "Rule runtime panic was contained during rule-node dispatch",
+                    node.span,
+                );
+            }
         }
     }
 
     for node in &semantic.selectors {
         for subscriber in &selector_subscribers {
-            let runtime = &mut active_rules[subscriber.rule_index].runtime;
-            (subscriber.callback)(node, runtime);
+            let active_rule = &mut active_rules[subscriber.rule_index];
+            if active_rule.failed {
+                continue;
+            }
+
+            let result = panic::catch_unwind(AssertUnwindSafe(|| {
+                (subscriber.callback)(node, &mut active_rule.runtime)
+            }));
+            if result.is_err() {
+                active_rule.failed = true;
+                active_rule.runtime.report_rule_runtime_failure(
+                    "Rule runtime panic was contained during selector dispatch",
+                    node.span,
+                );
+            }
         }
     }
 
     for node in &semantic.declarations {
         for subscriber in &declaration_subscribers {
-            let runtime = &mut active_rules[subscriber.rule_index].runtime;
-            (subscriber.callback)(node, runtime);
+            let active_rule = &mut active_rules[subscriber.rule_index];
+            if active_rule.failed {
+                continue;
+            }
+
+            let result = panic::catch_unwind(AssertUnwindSafe(|| {
+                (subscriber.callback)(node, &mut active_rule.runtime)
+            }));
+            if result.is_err() {
+                active_rule.failed = true;
+                active_rule.runtime.report_rule_runtime_failure(
+                    "Rule runtime panic was contained during declaration dispatch",
+                    node.span,
+                );
+            }
         }
     }
 
@@ -297,6 +461,7 @@ struct ActiveRule {
     on_declaration: Option<DeclarationCallback>,
     on_rule: Option<RuleNodeCallback>,
     runtime: RuleRuntimeCtx,
+    failed: bool,
 }
 
 struct RuleSubscriber {
@@ -429,9 +594,11 @@ mod tests {
     };
 
     use super::{
-        core_registry, merge_and_sort_diagnostics, run_rules, run_rules_with_config,
-        run_with_registry, sort_diagnostics, Rule, RuleContext, RuleMeta, RuleRegistry,
-        RuleRuntimeCtx, RuleVisitor,
+        core_registry, merge_and_sort_diagnostics, register_rule_pack, run_rules,
+        run_rules_with_config, run_with_registry, sort_diagnostics, Confidence, ProviderDiagnostic,
+        ProviderStatus, Rule, RuleContext, RuleMeta, RulePack, RuleRegistry, RuleRuntimeCtx,
+        RuleVisitor, TemplateUsageInput, TemplateUsageOutput, UsageFact, UsageKind, UsageProvider,
+        UsageProviderRegistry, UsageSource,
     };
 
     struct MockRule {
@@ -614,12 +781,17 @@ mod tests {
         };
 
         let mut config = Config::default();
-        config.rules.insert(RuleId::from("not_real"), Severity::Warn);
+        config
+            .rules
+            .insert(RuleId::from("not_real"), Severity::Warn);
 
         let diagnostics =
             run_rules_with_config(&semantic, &config).expect_err("unknown rule should fail");
         assert_eq!(diagnostics.len(), 1);
-        assert_eq!(diagnostics[0].rule_id.as_ref().map(RuleId::as_str), Some("not_real"));
+        assert_eq!(
+            diagnostics[0].rule_id.as_ref().map(RuleId::as_str),
+            Some("not_real")
+        );
     }
 
     #[test]
@@ -721,7 +893,172 @@ mod tests {
         assert_eq!(merged[2].message, "left");
     }
 
+    #[test]
+    fn contains_rule_runtime_panics_without_crashing_engine() {
+        let semantic = CssSemanticModel {
+            file_id: FileId::new(6),
+            span: Span::new(0, 8),
+            scope: Scope::Global,
+            source: ".a {}".to_string(),
+            rules: vec![RuleNode {
+                id: RuleNodeId(0),
+                selector_ids: vec![],
+                declaration_ids: vec![],
+                span: Span::new(0, 5),
+                is_at_rule: false,
+            }],
+            selectors: vec![],
+            declarations: vec![],
+            at_rules: vec![],
+            indexes: SemanticIndexes::default(),
+        };
+
+        let mut registry = RuleRegistry::new();
+        let _ = registry.register(PanicRule);
+        let _ = registry.register(SafeRule);
+        let empty_config = Config {
+            rules: BTreeMap::new(),
+        };
+
+        let diagnostics = run_with_registry(&semantic, &registry, &empty_config)
+            .expect("panic containment should not emit config diagnostics");
+        assert_eq!(diagnostics.len(), 2);
+        assert!(diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.message.contains("panic was contained")));
+        assert!(diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.message == "safe rule still ran"));
+    }
+
+    #[test]
+    fn rule_packs_can_register_rules_at_compile_time() {
+        let mut registry = RuleRegistry::new();
+        register_rule_pack(&mut registry, &TestRulePack);
+
+        let metas = registry.ordered_meta();
+        assert_eq!(metas.len(), 1);
+        assert_eq!(metas[0].id.as_str(), "pack_rule");
+    }
+
+    #[test]
+    fn usage_provider_registry_supports_typed_extension_hooks() {
+        let mut providers = UsageProviderRegistry::new();
+        assert!(providers.register(DummyUsageProvider).is_ok());
+        assert!(providers.get("template_usage").is_some());
+
+        let duplicate = providers
+            .register(DummyUsageProvider)
+            .expect_err("duplicate providers should fail");
+        assert!(duplicate.contains("duplicate usage provider registration"));
+    }
+
     struct EventCountingRule;
+
+    struct PanicRule;
+
+    impl Rule for PanicRule {
+        fn meta(&self) -> RuleMeta {
+            RuleMeta {
+                id: RuleId::from("a_panic_rule"),
+                description: "panic rule",
+                default_severity: Severity::Warn,
+                fixable: false,
+            }
+        }
+
+        fn create(&self, _ctx: RuleContext<'_>) -> RuleVisitor {
+            RuleVisitor {
+                on_rule: Some(panic_on_rule),
+                on_selector: None,
+                on_declaration: None,
+            }
+        }
+    }
+
+    fn panic_on_rule(_node: &RuleNode, _ctx: &mut RuleRuntimeCtx) {
+        panic!("simulated rule panic");
+    }
+
+    struct SafeRule;
+
+    impl Rule for SafeRule {
+        fn meta(&self) -> RuleMeta {
+            RuleMeta {
+                id: RuleId::from("z_safe_rule"),
+                description: "safe rule",
+                default_severity: Severity::Warn,
+                fixable: false,
+            }
+        }
+
+        fn create(&self, _ctx: RuleContext<'_>) -> RuleVisitor {
+            RuleVisitor {
+                on_rule: Some(safe_on_rule),
+                on_selector: None,
+                on_declaration: None,
+            }
+        }
+    }
+
+    fn safe_on_rule(node: &RuleNode, ctx: &mut RuleRuntimeCtx) {
+        ctx.report("safe rule still ran", node.span);
+    }
+
+    struct TestRulePack;
+
+    impl RulePack for TestRulePack {
+        fn id(&self) -> &'static str {
+            "test_pack"
+        }
+
+        fn register(&self, registry: &mut RuleRegistry) {
+            let _ = registry.register(PackRule);
+        }
+    }
+
+    struct PackRule;
+
+    impl Rule for PackRule {
+        fn meta(&self) -> RuleMeta {
+            RuleMeta {
+                id: RuleId::from("pack_rule"),
+                description: "pack rule",
+                default_severity: Severity::Warn,
+                fixable: false,
+            }
+        }
+
+        fn create(&self, _ctx: RuleContext<'_>) -> RuleVisitor {
+            RuleVisitor::empty()
+        }
+    }
+
+    struct DummyUsageProvider;
+
+    impl UsageProvider for DummyUsageProvider {
+        fn id(&self) -> &'static str {
+            "template_usage"
+        }
+
+        fn collect(&self, _input: &TemplateUsageInput) -> TemplateUsageOutput {
+            TemplateUsageOutput {
+                status: ProviderStatus::Complete,
+                facts: vec![UsageFact {
+                    kind: UsageKind::Class,
+                    name: "demo".to_string(),
+                    confidence: Confidence::High,
+                    source: UsageSource::StaticAttribute,
+                    span: Span::new(0, 4),
+                }],
+                unknown_regions: Vec::new(),
+                diagnostics: vec![ProviderDiagnostic {
+                    message: "ok".to_string(),
+                    span: None,
+                }],
+            }
+        }
+    }
 
     impl Rule for EventCountingRule {
         fn meta(&self) -> RuleMeta {
