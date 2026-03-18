@@ -1,0 +1,16 @@
+{
+  "line_endings": "lf",
+  "styles": [
+    {
+      "block_index": 0,
+      "framework": "svelte",
+      "start_offset": 43,
+      "end_offset": 65,
+      "start_line": 4,
+      "start_column": 8,
+      "end_line": 6,
+      "end_column": 1,
+      "content": "\n.title { right: 0; }\n"
+    }
+  ]
+}

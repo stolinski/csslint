@@ -1,0 +1,11 @@
+{
+  "styles": [
+    {
+      "framework": "svelte",
+      "scoped": false,
+      "module": false,
+      "content": "\n.title { margin-left: 1rem; }\n"
+    }
+  ],
+  "diagnostics": []
+}

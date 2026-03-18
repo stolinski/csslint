@@ -42,3 +42,4 @@
 - CLI integration tests are more portable when they fall back to a built `target/debug/csslint` binary if `CARGO_BIN_EXE_csslint` is unavailable, so exit-code and snapshot assertions still run in package-scoped test commands.
 - Imported Stylelint fixture locations should be calibrated against CSSLint diagnostic span starts (for example declaration diagnostics in `a { ... }` often begin at column 4), so compat expectations stay stable across harness runs.
 - Compatibility ratchets are easiest to enforce by versioning a baseline summary artifact and comparing global/per-rule pass rates in CI, instead of hard-coding static percentage thresholds in workflow logic.
+- Native framework fixtures are easier to scale when organized as `tests/native/{vue,svelte}/{extractor,scope,rules}` plus `tests/native/shared/{mapping,fix}`, and mapping cases should assert both byte offsets and line/column under explicit LF/CRLF modes.

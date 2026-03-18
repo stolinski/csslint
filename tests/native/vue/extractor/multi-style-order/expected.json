@@ -1,0 +1,17 @@
+{
+  "styles": [
+    {
+      "framework": "vue",
+      "scoped": true,
+      "module": false,
+      "content": "\n.button { color: red; }\n"
+    },
+    {
+      "framework": "vue",
+      "scoped": false,
+      "module": true,
+      "content": "\n.badge { color: blue; }\n"
+    }
+  ],
+  "diagnostics": []
+}

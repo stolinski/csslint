@@ -1,0 +1,27 @@
+{
+  "line_endings": "crlf",
+  "styles": [
+    {
+      "block_index": 0,
+      "framework": "vue",
+      "start_offset": 78,
+      "end_offset": 110,
+      "start_line": 4,
+      "start_column": 15,
+      "end_line": 6,
+      "end_column": 1,
+      "content": "\r\n.card { margin-left: 1rem; }\r\n"
+    },
+    {
+      "block_index": 1,
+      "framework": "vue",
+      "start_offset": 127,
+      "end_offset": 167,
+      "start_line": 7,
+      "start_column": 8,
+      "end_line": 9,
+      "end_column": 1,
+      "content": "\r\n:global(.theme-root) { color: red; }\r\n"
+    }
+  ]
+}
