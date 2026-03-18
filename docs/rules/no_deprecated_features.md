@@ -2,7 +2,7 @@
 
 ## Intent
 
-Report use of CSS features marked deprecated or disallowed by project compatibility policy for configured targets.
+Report use of CSS features marked deprecated or disallowed by project compatibility policy for v1 baseline targets.
 
 ## Compatibility Tag
 

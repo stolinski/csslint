@@ -10,10 +10,10 @@ Disallow duplicate declarations of the same property in a declaration block when
 
 ## Algorithm Summary
 
-1. For each rule block, group declarations by normalized property name.
-2. Detect duplicate declarations in source order.
-3. Preserve valid fallback patterns when values are intentionally distinct and safe.
-4. Report likely accidental duplicates.
+1. For each rule block, normalize declaration property names.
+2. Track seen `(property, value)` pairs in source order.
+3. Report only exact duplicate pairs after first occurrence.
+4. Preserve distinct-value declarations as fallback patterns.
 
 ## Config Options and Defaults
 

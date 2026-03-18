@@ -21,7 +21,7 @@ Status values:
 | `no_legacy_vendor_prefixes` | compatible | required | required | required | required | required | Property and value variants |
 | `no_overqualified_selectors` | compatible | required | required | required | required | n/a | Scoped context should not cause false positives |
 | `prefer_logical_properties` | native | n/a | required | required | required | required | Target-aware messaging if relevant |
-| `no_global_leaks` | native | n/a | required | required | required | n/a | Explicit `:global(...)` escapes allowed |
+| `no_global_leaks` | native | n/a | required | required | required | n/a | Explicit `:global(...)` escapes allowed; plain `.css` coverage is a no-report assertion (global scope only) |
 | `no_deprecated_features` | native | n/a | required | required | required | n/a | Requires target policy fixtures |
 
 ## Global Gates
