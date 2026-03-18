@@ -1,0 +1,74 @@
+{
+  "schemaVersion": 1,
+  "stylelint": {
+    "repository": "https://github.com/stylelint/stylelint.git",
+    "commit": "5bd2d21e8a6b47f529314284d162e6dcb37ef681",
+    "rule": "declaration-block-no-duplicate-properties",
+    "sourceFile": "lib/rules/declaration-block-no-duplicate-properties/__tests__/index.mjs"
+  },
+  "csslintRule": "no_duplicate_declarations",
+  "level": "error",
+  "importMode": "partial",
+  "supportedOptionSubsets": [
+    "config: [true]",
+    "exact duplicate property+value checks only"
+  ],
+  "cases": [
+    {
+      "id": "accept-non-duplicate-declaration-values",
+      "kind": "accept",
+      "fast": true,
+      "input": "a { color: red; color: blue; }",
+      "expected": {
+        "diagnostics": [],
+        "fixed": null
+      },
+      "source": {
+        "description": "accept non-duplicate declaration values",
+        "testRuleIndex": 0,
+        "caseIndex": 0
+      }
+    },
+    {
+      "id": "ignore-duplicate-values-with-stylelint-option",
+      "kind": "accept",
+      "fast": false,
+      "input": "a { color: red; color: blue; }",
+      "expected": {
+        "diagnostics": [],
+        "fixed": null
+      },
+      "source": {
+        "description": "ignore duplicate values with stylelint option",
+        "testRuleIndex": 0,
+        "caseIndex": 1
+      },
+      "skip": {
+        "reasonCode": "unsupported_option",
+        "note": "ignore options for duplicate declaration handling are out of scope for v1."
+      }
+    },
+    {
+      "id": "reject-duplicate-declaration",
+      "kind": "reject",
+      "fast": true,
+      "input": "a { color: red; color: red; }",
+      "expected": {
+        "diagnostics": [
+          {
+            "severity": "error",
+            "messageContains": "Duplicate declaration 'color: red'",
+            "line": 1,
+            "column": 17
+          }
+        ],
+        "fixed": "a { color: red;  }"
+      },
+      "source": {
+        "description": "reject duplicate declaration",
+        "testRuleIndex": 0,
+        "caseIndex": 0
+      }
+    }
+  ]
+}

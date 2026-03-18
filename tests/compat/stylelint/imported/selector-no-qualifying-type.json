@@ -1,0 +1,81 @@
+{
+  "schemaVersion": 1,
+  "stylelint": {
+    "repository": "https://github.com/stylelint/stylelint.git",
+    "commit": "5bd2d21e8a6b47f529314284d162e6dcb37ef681",
+    "rule": "selector-no-qualifying-type",
+    "sourceFile": "lib/rules/selector-no-qualifying-type/__tests__/index.mjs"
+  },
+  "csslintRule": "no_overqualified_selectors",
+  "level": "error",
+  "importMode": "partial",
+  "supportedOptionSubsets": [
+    "config: [true]",
+    "type+class and type+id matches only"
+  ],
+  "cases": [
+    {
+      "id": "accept-class-selector",
+      "kind": "accept",
+      "fast": true,
+      "input": ".card { color: red; }",
+      "expected": {
+        "diagnostics": [],
+        "fixed": null
+      },
+      "source": {
+        "description": "accept class selector",
+        "testRuleIndex": 0,
+        "caseIndex": 0
+      }
+    },
+    {
+      "id": "reject-nested-selector-syntax",
+      "kind": "reject",
+      "fast": false,
+      "input": "&.card { color: red; }",
+      "expected": {
+        "diagnostics": [
+          {
+            "severity": "error",
+            "messageContains": "Overqualified selector '&.card'",
+            "line": 1,
+            "column": 1
+          }
+        ],
+        "fixed": null
+      },
+      "source": {
+        "description": "reject nested selector syntax",
+        "testRuleIndex": 0,
+        "caseIndex": 1
+      },
+      "skip": {
+        "reasonCode": "custom_syntax",
+        "note": "Nested selector syntax requires custom syntax adapters outside v1 scope."
+      }
+    },
+    {
+      "id": "reject-type-qualified-class-selector",
+      "kind": "reject",
+      "fast": true,
+      "input": "article.card { color: red; }",
+      "expected": {
+        "diagnostics": [
+          {
+            "severity": "error",
+            "messageContains": "Overqualified selector 'article.card'",
+            "line": 1,
+            "column": 1
+          }
+        ],
+        "fixed": null
+      },
+      "source": {
+        "description": "reject type qualified class selector",
+        "testRuleIndex": 0,
+        "caseIndex": 0
+      }
+    }
+  ]
+}

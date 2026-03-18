@@ -1,0 +1,80 @@
+{
+  "schemaVersion": 1,
+  "stylelint": {
+    "repository": "https://github.com/stylelint/stylelint.git",
+    "commit": "5bd2d21e8a6b47f529314284d162e6dcb37ef681",
+    "rule": "value-no-vendor-prefix",
+    "sourceFile": "lib/rules/value-no-vendor-prefix/__tests__/index.mjs"
+  },
+  "csslintRule": "no_legacy_vendor_prefixes",
+  "level": "error",
+  "importMode": "partial",
+  "supportedOptionSubsets": [
+    "config: [true]"
+  ],
+  "cases": [
+    {
+      "id": "accept-unprefixed-value",
+      "kind": "accept",
+      "fast": true,
+      "input": "a { display: flex; }",
+      "expected": {
+        "diagnostics": [],
+        "fixed": null
+      },
+      "source": {
+        "description": "accept unprefixed value",
+        "testRuleIndex": 0,
+        "caseIndex": 0
+      }
+    },
+    {
+      "id": "reject-postcss-value-parser-integration-case",
+      "kind": "reject",
+      "fast": false,
+      "input": "a { display: value(var(--dynamic)); }",
+      "expected": {
+        "diagnostics": [
+          {
+            "severity": "error",
+            "messageContains": "Unexpected unknown value",
+            "line": 1,
+            "column": 14
+          }
+        ],
+        "fixed": null
+      },
+      "source": {
+        "description": "reject postcss value parser integration case",
+        "testRuleIndex": 0,
+        "caseIndex": 1
+      },
+      "skip": {
+        "reasonCode": "postcss_integration",
+        "note": "PostCSS value parser integration cases are deferred in v1."
+      }
+    },
+    {
+      "id": "reject-vendor-prefixed-value",
+      "kind": "reject",
+      "fast": true,
+      "input": "a { display: -webkit-flex; }",
+      "expected": {
+        "diagnostics": [
+          {
+            "severity": "error",
+            "messageContains": "Legacy vendor-prefixed value '-webkit-flex'",
+            "line": 1,
+            "column": 5
+          }
+        ],
+        "fixed": "a { display: flex; }"
+      },
+      "source": {
+        "description": "reject vendor-prefixed value",
+        "testRuleIndex": 0,
+        "caseIndex": 0
+      }
+    }
+  ]
+}

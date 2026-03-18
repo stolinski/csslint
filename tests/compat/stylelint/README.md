@@ -28,6 +28,13 @@ The commit SHA is intentionally fixed so fixture imports are reproducible.
 
 1. Update `source-pin.json` to a new Stylelint commit.
 2. Reconcile `suite-map.json` for any source file or option changes.
-3. Re-run the fixture importer to regenerate `imported/` fixtures.
+3. Re-run the fixture importer to regenerate `imported/` fixtures:
+
+   `node scripts/import_stylelint_fixtures.mjs`
+
+   Drift-only check mode:
+
+   `node scripts/import_stylelint_fixtures.mjs --check`
+
 4. Review and update `skip-manifest.yaml` entries as needed.
 5. Re-run compatibility harness and ratchet checks before merging.

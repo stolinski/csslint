@@ -1,0 +1,80 @@
+{
+  "schemaVersion": 1,
+  "stylelint": {
+    "repository": "https://github.com/stylelint/stylelint.git",
+    "commit": "5bd2d21e8a6b47f529314284d162e6dcb37ef681",
+    "rule": "no-duplicate-selectors",
+    "sourceFile": "lib/rules/no-duplicate-selectors/__tests__/index.mjs"
+  },
+  "csslintRule": "no_duplicate_selectors",
+  "level": "error",
+  "importMode": "full",
+  "supportedOptionSubsets": [
+    "config: [true]"
+  ],
+  "cases": [
+    {
+      "id": "accept-unique-selectors",
+      "kind": "accept",
+      "fast": true,
+      "input": "a { color: red; } b { color: blue; }",
+      "expected": {
+        "diagnostics": [],
+        "fixed": null
+      },
+      "source": {
+        "description": "accept unique selectors",
+        "testRuleIndex": 0,
+        "caseIndex": 0
+      }
+    },
+    {
+      "id": "reject-duplicate-selector",
+      "kind": "reject",
+      "fast": true,
+      "input": "a { color: red; }\na { color: blue; }",
+      "expected": {
+        "diagnostics": [
+          {
+            "severity": "error",
+            "messageContains": "Duplicate selector 'a'",
+            "line": 2,
+            "column": 1
+          }
+        ],
+        "fixed": null
+      },
+      "source": {
+        "description": "reject duplicate selector",
+        "testRuleIndex": 0,
+        "caseIndex": 0
+      }
+    },
+    {
+      "id": "respect-stylelint-disable-comment",
+      "kind": "reject",
+      "fast": false,
+      "input": "/* stylelint-disable-next-line no-duplicate-selectors */\na { color: red; }\na { color: blue; }",
+      "expected": {
+        "diagnostics": [
+          {
+            "severity": "error",
+            "messageContains": "Duplicate selector 'a'",
+            "line": 3,
+            "column": 1
+          }
+        ],
+        "fixed": null
+      },
+      "source": {
+        "description": "respect stylelint disable comment",
+        "testRuleIndex": 0,
+        "caseIndex": 1
+      },
+      "skip": {
+        "reasonCode": "directive_comments",
+        "note": "stylelint-disable directives are deferred from core v1 behavior."
+      }
+    }
+  ]
+}

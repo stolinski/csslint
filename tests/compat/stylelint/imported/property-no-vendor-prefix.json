@@ -1,0 +1,54 @@
+{
+  "schemaVersion": 1,
+  "stylelint": {
+    "repository": "https://github.com/stylelint/stylelint.git",
+    "commit": "5bd2d21e8a6b47f529314284d162e6dcb37ef681",
+    "rule": "property-no-vendor-prefix",
+    "sourceFile": "lib/rules/property-no-vendor-prefix/__tests__/index.mjs"
+  },
+  "csslintRule": "no_legacy_vendor_prefixes",
+  "level": "error",
+  "importMode": "partial",
+  "supportedOptionSubsets": [
+    "config: [true]"
+  ],
+  "cases": [
+    {
+      "id": "accept-unprefixed-property",
+      "kind": "accept",
+      "fast": true,
+      "input": "a { transform: rotate(0); }",
+      "expected": {
+        "diagnostics": [],
+        "fixed": null
+      },
+      "source": {
+        "description": "accept unprefixed property",
+        "testRuleIndex": 0,
+        "caseIndex": 0
+      }
+    },
+    {
+      "id": "reject-vendor-prefixed-property",
+      "kind": "reject",
+      "fast": true,
+      "input": "a { -webkit-transform: rotate(0); }",
+      "expected": {
+        "diagnostics": [
+          {
+            "severity": "error",
+            "messageContains": "Legacy vendor-prefixed property '-webkit-transform'",
+            "line": 1,
+            "column": 5
+          }
+        ],
+        "fixed": "a { transform: rotate(0); }"
+      },
+      "source": {
+        "description": "reject vendor-prefixed property",
+        "testRuleIndex": 0,
+        "caseIndex": 0
+      }
+    }
+  ]
+}

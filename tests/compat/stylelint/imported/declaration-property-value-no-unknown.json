@@ -1,0 +1,78 @@
+{
+  "schemaVersion": 1,
+  "stylelint": {
+    "repository": "https://github.com/stylelint/stylelint.git",
+    "commit": "5bd2d21e8a6b47f529314284d162e6dcb37ef681",
+    "rule": "declaration-property-value-no-unknown",
+    "sourceFile": "lib/rules/declaration-property-value-no-unknown/__tests__/index.mjs"
+  },
+  "csslintRule": "no_invalid_values",
+  "level": "error",
+  "importMode": "partial",
+  "supportedOptionSubsets": [
+    "single-token v1 value subset",
+    "keywords: display, position, visibility, box-sizing, overflow, flex-direction, flex-wrap",
+    "numeric range: opacity"
+  ],
+  "cases": [
+    {
+      "id": "accept-known-display-value",
+      "kind": "accept",
+      "fast": true,
+      "input": "a { display: flex; }",
+      "expected": {
+        "diagnostics": [],
+        "fixed": null
+      },
+      "source": {
+        "description": "accept known display value",
+        "testRuleIndex": 0,
+        "caseIndex": 0
+      }
+    },
+    {
+      "id": "reject-out-of-range-opacity",
+      "kind": "reject",
+      "fast": false,
+      "input": "a { opacity: 2; }",
+      "expected": {
+        "diagnostics": [
+          {
+            "severity": "error",
+            "messageContains": "Invalid value '2' for property 'opacity'",
+            "line": 1,
+            "column": 5
+          }
+        ],
+        "fixed": null
+      },
+      "source": {
+        "description": "reject out of range opacity",
+        "testRuleIndex": 0,
+        "caseIndex": 1
+      }
+    },
+    {
+      "id": "reject-unknown-display-value",
+      "kind": "reject",
+      "fast": true,
+      "input": "a { display: squish; }",
+      "expected": {
+        "diagnostics": [
+          {
+            "severity": "error",
+            "messageContains": "Invalid value 'squish' for property 'display'",
+            "line": 1,
+            "column": 5
+          }
+        ],
+        "fixed": null
+      },
+      "source": {
+        "description": "reject unknown display value",
+        "testRuleIndex": 0,
+        "caseIndex": 0
+      }
+    }
+  ]
+}

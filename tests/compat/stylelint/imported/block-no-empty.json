@@ -1,0 +1,81 @@
+{
+  "schemaVersion": 1,
+  "stylelint": {
+    "repository": "https://github.com/stylelint/stylelint.git",
+    "commit": "5bd2d21e8a6b47f529314284d162e6dcb37ef681",
+    "rule": "block-no-empty",
+    "sourceFile": "lib/rules/block-no-empty/__tests__/index.mjs"
+  },
+  "csslintRule": "no_empty_rules",
+  "level": "error",
+  "importMode": "full",
+  "supportedOptionSubsets": [
+    "config: [true]",
+    "fix: true"
+  ],
+  "cases": [
+    {
+      "id": "accept-non-empty-block",
+      "kind": "accept",
+      "fast": true,
+      "input": "a { color: red; }",
+      "expected": {
+        "diagnostics": [],
+        "fixed": null
+      },
+      "source": {
+        "description": "accept non-empty block",
+        "testRuleIndex": 0,
+        "caseIndex": 0
+      }
+    },
+    {
+      "id": "reject-empty-block",
+      "kind": "reject",
+      "fast": true,
+      "input": "a {}",
+      "expected": {
+        "diagnostics": [
+          {
+            "severity": "error",
+            "messageContains": "Empty rule block detected",
+            "line": 1,
+            "column": 1
+          }
+        ],
+        "fixed": ""
+      },
+      "source": {
+        "description": "reject empty block",
+        "testRuleIndex": 0,
+        "caseIndex": 0
+      }
+    },
+    {
+      "id": "reject-scss-interpolation",
+      "kind": "reject",
+      "fast": false,
+      "input": "a { #{$token}: red; }",
+      "expected": {
+        "diagnostics": [
+          {
+            "severity": "error",
+            "messageContains": "Unexpected empty block",
+            "line": 1,
+            "column": 1
+          }
+        ],
+        "fixed": null
+      },
+      "source": {
+        "description": "reject scss interpolation",
+        "testRuleIndex": 0,
+        "caseIndex": 1
+      },
+      "skip": {
+        "reasonCode": "scss_less",
+        "note": "Requires SCSS syntax support, which is deferred for v1."
+      }
+    }
+  ]
+}

@@ -1,0 +1,74 @@
+{
+  "schemaVersion": 1,
+  "stylelint": {
+    "repository": "https://github.com/stylelint/stylelint.git",
+    "commit": "5bd2d21e8a6b47f529314284d162e6dcb37ef681",
+    "rule": "property-no-unknown",
+    "sourceFile": "lib/rules/property-no-unknown/__tests__/index.mjs"
+  },
+  "csslintRule": "no_unknown_properties",
+  "level": "error",
+  "importMode": "partial",
+  "supportedOptionSubsets": [
+    "config: [true]",
+    "custom properties are always ignored"
+  ],
+  "cases": [
+    {
+      "id": "accept-known-property",
+      "kind": "accept",
+      "fast": true,
+      "input": "a { color: red; }",
+      "expected": {
+        "diagnostics": [],
+        "fixed": null
+      },
+      "source": {
+        "description": "accept known property",
+        "testRuleIndex": 0,
+        "caseIndex": 0
+      }
+    },
+    {
+      "id": "ignore-unknown-property-via-option",
+      "kind": "accept",
+      "fast": false,
+      "input": "a { colr: red; }",
+      "expected": {
+        "diagnostics": [],
+        "fixed": null
+      },
+      "source": {
+        "description": "ignore unknown property via option",
+        "testRuleIndex": 0,
+        "caseIndex": 1
+      },
+      "skip": {
+        "reasonCode": "unsupported_option",
+        "note": "ignoreProperties option is outside the v1 compatibility subset."
+      }
+    },
+    {
+      "id": "reject-unknown-property",
+      "kind": "reject",
+      "fast": true,
+      "input": "a { colr: red; }",
+      "expected": {
+        "diagnostics": [
+          {
+            "severity": "error",
+            "messageContains": "Unknown property 'colr'",
+            "line": 1,
+            "column": 5
+          }
+        ],
+        "fixed": null
+      },
+      "source": {
+        "description": "reject unknown property",
+        "testRuleIndex": 0,
+        "caseIndex": 0
+      }
+    }
+  ]
+}
