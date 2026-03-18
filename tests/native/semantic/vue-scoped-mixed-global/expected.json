@@ -1,0 +1,15 @@
+{
+  "selectors": [
+    {
+      "raw": ".foo :global(.bar) .baz",
+      "normalized": ".foo :global(.bar) .baz",
+      "part_scopes": ["vue_scoped", "global", "vue_scoped"]
+    }
+  ],
+  "declaration_props": ["color"],
+  "scope_index_counts": {
+    "global": 1,
+    "vue_scoped": 1
+  },
+  "class_index_keys": ["bar", "baz", "foo"]
+}

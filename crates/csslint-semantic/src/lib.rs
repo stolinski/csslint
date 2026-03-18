@@ -145,10 +145,7 @@ pub fn build_semantic_model(parsed: &ParsedStyle) -> CssSemanticModel {
                         .push(selector_id);
                 }
 
-                let selector_scopes = parts
-                    .iter()
-                    .map(|part| part.scope)
-                    .collect::<BTreeSet<_>>();
+                let selector_scopes = parts.iter().map(|part| part.scope).collect::<BTreeSet<_>>();
                 for selector_scope in selector_scopes {
                     indexes
                         .selectors_by_scope
@@ -562,12 +559,24 @@ fn parse_declarations(body: &str, body_start: usize) -> Vec<ParsedDeclaration> {
             continue;
         }
 
-        push_declaration_segment(body, body_start, segment_start, index + 1, &mut declarations);
+        push_declaration_segment(
+            body,
+            body_start,
+            segment_start,
+            index + 1,
+            &mut declarations,
+        );
         segment_start = index + 1;
     }
 
     if segment_start < bytes.len() {
-        push_declaration_segment(body, body_start, segment_start, bytes.len(), &mut declarations);
+        push_declaration_segment(
+            body,
+            body_start,
+            segment_start,
+            bytes.len(),
+            &mut declarations,
+        );
     }
 
     declarations
@@ -663,14 +672,8 @@ mod tests {
 
     #[test]
     fn normalizes_selector_whitespace_conservatively() {
-        assert_eq!(
-            super::normalize_selector("  .foo   .bar   "),
-            ".foo .bar"
-        );
-        assert_eq!(
-            super::normalize_selector(".foo   >   .bar"),
-            ".foo > .bar"
-        );
+        assert_eq!(super::normalize_selector("  .foo   .bar   "), ".foo .bar");
+        assert_eq!(super::normalize_selector(".foo   >   .bar"), ".foo > .bar");
     }
 
     #[test]
@@ -697,12 +700,19 @@ mod tests {
 
         let semantic = build_semantic_model(&parsed);
         let selector = &semantic.selectors[0];
-        let scopes = selector.parts.iter().map(|part| part.scope).collect::<Vec<_>>();
+        let scopes = selector
+            .parts
+            .iter()
+            .map(|part| part.scope)
+            .collect::<Vec<_>>();
         assert_eq!(
             scopes,
             vec![Scope::VueScoped, Scope::Global, Scope::VueScoped]
         );
-        assert_eq!(semantic.indexes.selectors_by_scope[&Scope::VueScoped].len(), 1);
+        assert_eq!(
+            semantic.indexes.selectors_by_scope[&Scope::VueScoped].len(),
+            1
+        );
         assert_eq!(semantic.indexes.selectors_by_scope[&Scope::Global].len(), 1);
     }
 }

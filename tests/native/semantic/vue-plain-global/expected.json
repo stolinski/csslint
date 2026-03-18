@@ -1,0 +1,14 @@
+{
+  "selectors": [
+    {
+      "raw": ".global-box",
+      "normalized": ".global-box",
+      "part_scopes": ["global"]
+    }
+  ],
+  "declaration_props": ["color"],
+  "scope_index_counts": {
+    "global": 1
+  },
+  "class_index_keys": ["global-box"]
+}

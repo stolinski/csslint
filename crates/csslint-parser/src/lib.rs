@@ -5,17 +5,9 @@ use csslint_extractor::ExtractedStyle;
 #[cfg(feature = "lightning")]
 use lightningcss::stylesheet::{ParserOptions, StyleSheet};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct CssParserOptions {
     pub enable_recovery: bool,
-}
-
-impl Default for CssParserOptions {
-    fn default() -> Self {
-        Self {
-            enable_recovery: false,
-        }
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

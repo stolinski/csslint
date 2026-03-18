@@ -1,0 +1,19 @@
+{
+  "selectors": [
+    {
+      "raw": ".a",
+      "normalized": ".a",
+      "part_scopes": ["global"]
+    },
+    {
+      "raw": ".b",
+      "normalized": ".b",
+      "part_scopes": ["global"]
+    }
+  ],
+  "declaration_props": ["color", "margin"],
+  "scope_index_counts": {
+    "global": 2
+  },
+  "class_index_keys": ["a", "b"]
+}

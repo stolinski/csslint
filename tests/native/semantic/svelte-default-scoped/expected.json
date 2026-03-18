@@ -1,0 +1,14 @@
+{
+  "selectors": [
+    {
+      "raw": ".title",
+      "normalized": ".title",
+      "part_scopes": ["svelte_scoped"]
+    }
+  ],
+  "declaration_props": ["font-size"],
+  "scope_index_counts": {
+    "svelte_scoped": 1
+  },
+  "class_index_keys": ["title"]
+}
