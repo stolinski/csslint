@@ -17,3 +17,4 @@
 - Conservative selector normalization should collapse whitespace only outside quotes/brackets/parentheses so attribute and pseudo arguments are not rewritten aggressively.
 - Scope indexing must account for mixed selectors (`:global(...)`), so a selector may belong to both global and scoped buckets simultaneously.
 - Semantic snapshot fixtures are useful as truth-table locks: Vue scoped/module/plain and Svelte scoped defaults should be asserted through expected scope buckets, not only unit tests.
+- Rule registry determinism is easiest to enforce by storing rules in a `BTreeMap<RuleId, ...>` so loading order is stable by construction.
