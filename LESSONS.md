@@ -19,3 +19,4 @@
 - Semantic snapshot fixtures are useful as truth-table locks: Vue scoped/module/plain and Svelte scoped defaults should be asserted through expected scope buckets, not only unit tests.
 - Rule registry determinism is easiest to enforce by storing rules in a `BTreeMap<RuleId, ...>` so loading order is stable by construction.
 - For single-pass engines, instantiate active rules first, then precompute event subscriber lists so semantic nodes are traversed once per node type.
+- Treat config validation as a preflight step: unknown rule IDs should short-circuit before traversal, while severity overrides are applied at rule instantiation.

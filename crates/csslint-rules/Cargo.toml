@@ -8,5 +8,6 @@ publish = false
 path = "src/lib.rs"
 
 [dependencies]
+csslint-config = { path = "../csslint-config" }
 csslint-core = { path = "../csslint-core" }
 csslint-semantic = { path = "../csslint-semantic" }

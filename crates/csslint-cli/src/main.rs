@@ -5,7 +5,7 @@ use std::path::Path;
 use csslint_core::FileId;
 
 fn main() {
-    let _config = csslint_config::Config::default();
+    let config = csslint_config::Config::default();
     let file_id = FileId::new(0);
     let source = ".btn {}";
     let extraction = csslint_extractor::extract_styles(file_id, Path::new("stdin.css"), source);
@@ -15,7 +15,16 @@ fn main() {
         match csslint_parser::parse_style(style) {
             Ok(parsed) => {
                 let semantic = csslint_semantic::build_semantic_model(&parsed);
-                diagnostics.extend(csslint_rules::run_rules(&semantic));
+                match csslint_rules::run_rules_with_config(&semantic, &config) {
+                    Ok(rule_diagnostics) => diagnostics.extend(rule_diagnostics),
+                    Err(config_diagnostics) => {
+                        println!(
+                            "csslint CLI scaffold: {} config diagnostics",
+                            config_diagnostics.len()
+                        );
+                        return;
+                    }
+                }
             }
             Err(diagnostic) => diagnostics.push(*diagnostic),
         }

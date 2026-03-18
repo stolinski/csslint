@@ -1,7 +1,8 @@
 #![forbid(unsafe_code)]
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
+use csslint_config::Config;
 use csslint_core::{Diagnostic, FileId, RuleId, Severity, Span};
 use csslint_semantic::{CssSemanticModel, DeclarationNode, RuleNode, SelectorNode};
 
@@ -15,6 +16,12 @@ pub struct RuleMeta {
     pub description: &'static str,
     pub default_severity: Severity,
     pub fixable: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ConfigDiagnostic {
+    pub rule_id: Option<RuleId>,
+    pub message: String,
 }
 
 pub struct RuleVisitor {
@@ -121,32 +128,74 @@ impl RuleRegistry {
 pub fn core_registry() -> RuleRegistry {
     let mut registry = RuleRegistry::new();
     let _ = registry.register(NoEmptyRules);
+
+    for meta in placeholder_rule_metas() {
+        let _ = registry.register(PlaceholderRule { meta });
+    }
+
     registry
 }
 
 pub fn run_rules(semantic: &CssSemanticModel) -> Vec<Diagnostic> {
-    let registry = core_registry();
-    run_with_registry(semantic, &registry)
+    run_rules_with_config(semantic, &Config::default()).unwrap_or_default()
 }
 
-fn run_with_registry(semantic: &CssSemanticModel, registry: &RuleRegistry) -> Vec<Diagnostic> {
+pub fn run_rules_with_config(
+    semantic: &CssSemanticModel,
+    config: &Config,
+) -> Result<Vec<Diagnostic>, Vec<ConfigDiagnostic>> {
+    let registry = core_registry();
+    run_with_registry(semantic, &registry, config)
+}
+
+fn run_with_registry(
+    semantic: &CssSemanticModel,
+    registry: &RuleRegistry,
+    config: &Config,
+) -> Result<Vec<Diagnostic>, Vec<ConfigDiagnostic>> {
+    let known_rule_ids = registry
+        .ordered_meta()
+        .into_iter()
+        .map(|meta| meta.id)
+        .collect::<BTreeSet<_>>();
+
+    let config_diagnostics = config
+        .rules
+        .keys()
+        .filter(|rule_id| !known_rule_ids.contains(*rule_id))
+        .map(|rule_id| ConfigDiagnostic {
+            rule_id: Some(rule_id.clone()),
+            message: format!("Unknown rule id: {rule_id}"),
+        })
+        .collect::<Vec<_>>();
+
+    if !config_diagnostics.is_empty() {
+        return Err(config_diagnostics);
+    }
+
     let mut active_rules = Vec::new();
 
     for rule in registry.ordered_rules() {
         let meta = rule.meta();
-        if meta.default_severity == Severity::Off {
+        let severity = config
+            .rules
+            .get(&meta.id)
+            .copied()
+            .unwrap_or(meta.default_severity);
+
+        if severity == Severity::Off {
             continue;
         }
 
         let visitor = rule.create(RuleContext {
             semantic,
-            severity: meta.default_severity,
+            severity,
         });
         active_rules.push(ActiveRule {
             on_selector: visitor.on_selector,
             on_declaration: visitor.on_declaration,
             on_rule: visitor.on_rule,
-            runtime: RuleRuntimeCtx::new(semantic.file_id, meta.id, meta.default_severity),
+            runtime: RuleRuntimeCtx::new(semantic.file_id, meta.id, severity),
         });
     }
 
@@ -200,7 +249,7 @@ fn run_with_registry(semantic: &CssSemanticModel, registry: &RuleRegistry) -> Ve
     for active_rule in active_rules {
         diagnostics.extend(active_rule.runtime.into_diagnostics());
     }
-    diagnostics
+    Ok(diagnostics)
 }
 
 struct ActiveRule {
@@ -227,6 +276,10 @@ struct DeclarationSubscriber {
 
 struct NoEmptyRules;
 
+struct PlaceholderRule {
+    meta: RuleMeta,
+}
+
 impl Rule for NoEmptyRules {
     fn meta(&self) -> RuleMeta {
         RuleMeta {
@@ -246,6 +299,75 @@ impl Rule for NoEmptyRules {
     }
 }
 
+impl Rule for PlaceholderRule {
+    fn meta(&self) -> RuleMeta {
+        self.meta.clone()
+    }
+
+    fn create(&self, _ctx: RuleContext<'_>) -> RuleVisitor {
+        RuleVisitor::empty()
+    }
+}
+
+fn placeholder_rule_metas() -> Vec<RuleMeta> {
+    vec![
+        RuleMeta {
+            id: RuleId::from("no_unknown_properties"),
+            description: "Disallow unknown CSS properties",
+            default_severity: Severity::Error,
+            fixable: false,
+        },
+        RuleMeta {
+            id: RuleId::from("no_invalid_values"),
+            description: "Disallow invalid declaration values",
+            default_severity: Severity::Error,
+            fixable: false,
+        },
+        RuleMeta {
+            id: RuleId::from("no_duplicate_selectors"),
+            description: "Disallow duplicate selectors",
+            default_severity: Severity::Error,
+            fixable: false,
+        },
+        RuleMeta {
+            id: RuleId::from("no_duplicate_declarations"),
+            description: "Disallow duplicate declarations in a rule block",
+            default_severity: Severity::Error,
+            fixable: true,
+        },
+        RuleMeta {
+            id: RuleId::from("no_legacy_vendor_prefixes"),
+            description: "Disallow legacy vendor-prefixed properties/values",
+            default_severity: Severity::Warn,
+            fixable: true,
+        },
+        RuleMeta {
+            id: RuleId::from("no_overqualified_selectors"),
+            description: "Disallow overqualified selectors",
+            default_severity: Severity::Warn,
+            fixable: false,
+        },
+        RuleMeta {
+            id: RuleId::from("prefer_logical_properties"),
+            description: "Prefer logical over physical properties",
+            default_severity: Severity::Warn,
+            fixable: true,
+        },
+        RuleMeta {
+            id: RuleId::from("no_global_leaks"),
+            description: "Disallow accidental global selector leaks in scoped styles",
+            default_severity: Severity::Error,
+            fixable: false,
+        },
+        RuleMeta {
+            id: RuleId::from("no_deprecated_features"),
+            description: "Disallow deprecated CSS features for configured targets",
+            default_severity: Severity::Warn,
+            fixable: false,
+        },
+    ]
+}
+
 fn no_empty_rules_on_rule(rule: &RuleNode, ctx: &mut RuleRuntimeCtx) {
     if rule.is_at_rule || !rule.declaration_ids.is_empty() {
         return;
@@ -256,17 +378,19 @@ fn no_empty_rules_on_rule(rule: &RuleNode, ctx: &mut RuleRuntimeCtx) {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap;
     use std::sync::atomic::{AtomicUsize, Ordering};
 
-    use csslint_core::{FileId, RuleId, Scope, Span};
+    use csslint_config::Config;
+    use csslint_core::{FileId, RuleId, Scope, Severity, Span};
     use csslint_semantic::{
         CssSemanticModel, DeclarationId, DeclarationNode, RuleNode, RuleNodeId, SelectorId,
         SelectorNode, SelectorPart, SelectorPartKind, SemanticIndexes,
     };
 
     use super::{
-        core_registry, run_rules, run_with_registry, Rule, RuleContext, RuleMeta, RuleRegistry,
-        RuleRuntimeCtx, RuleVisitor,
+        core_registry, run_rules, run_rules_with_config, run_with_registry, Rule, RuleContext,
+        RuleMeta, RuleRegistry, RuleRuntimeCtx, RuleVisitor,
     };
 
     struct MockRule {
@@ -399,7 +523,11 @@ mod tests {
         let mut registry = RuleRegistry::new();
         let _ = registry.register(EventCountingRule);
 
-        let diagnostics = run_with_registry(&semantic, &registry);
+        let empty_config = Config {
+            rules: BTreeMap::new(),
+        };
+        let diagnostics = run_with_registry(&semantic, &registry, &empty_config)
+            .expect("dispatch should run without config diagnostics");
         assert_eq!(diagnostics.len(), 5);
     }
 
@@ -421,9 +549,67 @@ mod tests {
 
         let mut registry = RuleRegistry::new();
         let _ = registry.register(OffRule);
-        let _ = run_with_registry(&semantic, &registry);
+        let empty_config = Config {
+            rules: BTreeMap::new(),
+        };
+        let _ = run_with_registry(&semantic, &registry, &empty_config)
+            .expect("off rule should not trigger config diagnostics");
 
         assert_eq!(OFF_RULE_CREATE_CALLS.load(Ordering::SeqCst), 0);
+    }
+
+    #[test]
+    fn unknown_rule_config_halts_execution_with_config_diagnostic() {
+        let semantic = CssSemanticModel {
+            file_id: FileId::new(4),
+            span: Span::new(0, 4),
+            scope: Scope::Global,
+            source: ".a{}".to_string(),
+            rules: vec![],
+            selectors: vec![],
+            declarations: vec![],
+            at_rules: vec![],
+            indexes: SemanticIndexes::default(),
+        };
+
+        let mut config = Config::default();
+        config.rules.insert(RuleId::from("not_real"), Severity::Warn);
+
+        let diagnostics =
+            run_rules_with_config(&semantic, &config).expect_err("unknown rule should fail");
+        assert_eq!(diagnostics.len(), 1);
+        assert_eq!(diagnostics[0].rule_id.as_ref().map(RuleId::as_str), Some("not_real"));
+    }
+
+    #[test]
+    fn severity_override_is_applied_to_runtime_diagnostics() {
+        let semantic = CssSemanticModel {
+            file_id: FileId::new(5),
+            span: Span::new(0, 6),
+            scope: Scope::Global,
+            source: ".a {}".to_string(),
+            rules: vec![RuleNode {
+                id: RuleNodeId(0),
+                selector_ids: vec![],
+                declaration_ids: vec![],
+                span: Span::new(0, 5),
+                is_at_rule: false,
+            }],
+            selectors: vec![],
+            declarations: vec![],
+            at_rules: vec![],
+            indexes: SemanticIndexes::default(),
+        };
+
+        let mut config = Config::default();
+        config
+            .rules
+            .insert(RuleId::from("no_empty_rules"), Severity::Error);
+
+        let diagnostics =
+            run_rules_with_config(&semantic, &config).expect("config should be valid");
+        assert_eq!(diagnostics.len(), 1);
+        assert_eq!(diagnostics[0].severity, Severity::Error);
     }
 
     struct EventCountingRule;
