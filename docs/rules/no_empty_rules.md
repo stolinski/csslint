@@ -34,7 +34,9 @@ Disallow empty rule blocks.
 
 ## Known Divergences from Stylelint
 
+- Imported compatibility suite: `block-no-empty` (`tests/compat/stylelint/imported/block-no-empty.json`).
 - v1 preserves strict offset safety over aggressive normalization around comments.
+- Cases requiring SCSS/LESS syntax are explicitly skipped via `scss_less` entries in `tests/compat/stylelint/skip-manifest.yaml`.
 
 ## Complexity and Performance Notes
 

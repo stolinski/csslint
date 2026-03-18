@@ -104,6 +104,10 @@ Track:
 
 Publish these metrics in CI summaries and release notes.
 
+Implementation command:
+
+- `cargo run -p csslint-test-harness --bin stylelint_compat_report -- --mode <fast|full> --output <path> [--baseline <path>] [--enforce-ratchet]`
+
 ## CI Integration
 
 Run compatibility in a dedicated lane:
@@ -112,6 +116,10 @@ Run compatibility in a dedicated lane:
 - `compat-full`: full imported subset on main/nightly
 
 Do not block unrelated changes on known-skipped cases.
+
+Current ratchet baseline path:
+
+- `tests/compat/stylelint/baseline/compat-summary.json`
 
 ## Governance and Upgrades
 

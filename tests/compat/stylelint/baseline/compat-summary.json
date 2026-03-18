@@ -1,0 +1,158 @@
+{
+  "schemaVersion": 1,
+  "mode": "full",
+  "source": {
+    "repository": "https://github.com/stylelint/stylelint.git",
+    "commit": "5bd2d21e8a6b47f529314284d162e6dcb37ef681"
+  },
+  "totals": {
+    "totalCases": 23,
+    "executedCases": 17,
+    "passed": 17,
+    "failed": 0,
+    "skipped": 6,
+    "fixableCases": 4,
+    "fixPassed": 4,
+    "fixFailed": 0,
+    "passRate": 1.0,
+    "fixPassRate": 1.0
+  },
+  "byRule": [
+    {
+      "csslintRule": "no_duplicate_declarations",
+      "stylelintRules": [
+        "declaration-block-no-duplicate-properties"
+      ],
+      "totalCases": 3,
+      "executedCases": 2,
+      "passed": 2,
+      "failed": 0,
+      "skipped": 1,
+      "fixableCases": 1,
+      "fixPassed": 1,
+      "fixFailed": 0,
+      "passRate": 1.0,
+      "fixPassRate": 1.0
+    },
+    {
+      "csslintRule": "no_duplicate_selectors",
+      "stylelintRules": [
+        "no-duplicate-selectors"
+      ],
+      "totalCases": 3,
+      "executedCases": 2,
+      "passed": 2,
+      "failed": 0,
+      "skipped": 1,
+      "fixableCases": 0,
+      "fixPassed": 0,
+      "fixFailed": 0,
+      "passRate": 1.0,
+      "fixPassRate": 1.0
+    },
+    {
+      "csslintRule": "no_empty_rules",
+      "stylelintRules": [
+        "block-no-empty"
+      ],
+      "totalCases": 3,
+      "executedCases": 2,
+      "passed": 2,
+      "failed": 0,
+      "skipped": 1,
+      "fixableCases": 1,
+      "fixPassed": 1,
+      "fixFailed": 0,
+      "passRate": 1.0,
+      "fixPassRate": 1.0
+    },
+    {
+      "csslintRule": "no_invalid_values",
+      "stylelintRules": [
+        "declaration-property-value-no-unknown"
+      ],
+      "totalCases": 3,
+      "executedCases": 3,
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0,
+      "fixableCases": 0,
+      "fixPassed": 0,
+      "fixFailed": 0,
+      "passRate": 1.0,
+      "fixPassRate": 1.0
+    },
+    {
+      "csslintRule": "no_legacy_vendor_prefixes",
+      "stylelintRules": [
+        "property-no-vendor-prefix",
+        "value-no-vendor-prefix"
+      ],
+      "totalCases": 5,
+      "executedCases": 4,
+      "passed": 4,
+      "failed": 0,
+      "skipped": 1,
+      "fixableCases": 2,
+      "fixPassed": 2,
+      "fixFailed": 0,
+      "passRate": 1.0,
+      "fixPassRate": 1.0
+    },
+    {
+      "csslintRule": "no_overqualified_selectors",
+      "stylelintRules": [
+        "selector-no-qualifying-type"
+      ],
+      "totalCases": 3,
+      "executedCases": 2,
+      "passed": 2,
+      "failed": 0,
+      "skipped": 1,
+      "fixableCases": 0,
+      "fixPassed": 0,
+      "fixFailed": 0,
+      "passRate": 1.0,
+      "fixPassRate": 1.0
+    },
+    {
+      "csslintRule": "no_unknown_properties",
+      "stylelintRules": [
+        "property-no-unknown"
+      ],
+      "totalCases": 3,
+      "executedCases": 2,
+      "passed": 2,
+      "failed": 0,
+      "skipped": 1,
+      "fixableCases": 0,
+      "fixPassed": 0,
+      "fixFailed": 0,
+      "passRate": 1.0,
+      "fixPassRate": 1.0
+    }
+  ],
+  "skipReasons": [
+    {
+      "reasonCode": "custom_syntax",
+      "count": 1
+    },
+    {
+      "reasonCode": "directive_comments",
+      "count": 1
+    },
+    {
+      "reasonCode": "postcss_integration",
+      "count": 1
+    },
+    {
+      "reasonCode": "scss_less",
+      "count": 1
+    },
+    {
+      "reasonCode": "unsupported_option",
+      "count": 2
+    }
+  ],
+  "failures": []
+}

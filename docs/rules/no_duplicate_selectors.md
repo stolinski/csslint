@@ -34,9 +34,11 @@ Disallow duplicate selectors within the same rule context.
 
 ## Known Divergences from Stylelint
 
+- Imported compatibility suite: `no-duplicate-selectors` (`tests/compat/stylelint/imported/no-duplicate-selectors.json`).
 - Normalization is conservative to avoid false positives.
 - v1 favors fewer false duplicates over aggressive equivalence collapsing.
 - Current semantic parsing is conservative and does not model nested at-rule selector context in duplicate-key partitioning.
+- Directive-comment suppression cases (`stylelint-disable*`) are explicitly skipped via `directive_comments` entries in `tests/compat/stylelint/skip-manifest.yaml`.
 
 ## Complexity and Performance Notes
 

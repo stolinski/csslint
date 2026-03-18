@@ -92,7 +92,7 @@ Note: v1 does not require a fixed speedup multiplier over Stylelint, but every r
 
 - Compatibility harness runs for all selected imported suites.
 - Pass/skip/fail is reported per rule and globally.
-- Pass rate may not drop from the previous baseline without a linked deferral or known-divergence update.
+- Pass rate may not drop from the previous baseline (`tests/compat/stylelint/baseline/compat-summary.json`) without a linked deferral or known-divergence update.
 
 ## Reporting Artifacts
 
@@ -109,6 +109,7 @@ Recommended artifact paths:
 
 - `artifacts/perf/perf-summary.json`
 - `artifacts/perf/perf-summary.md`
+- `artifacts/compat/compat-fast-summary.json`
 - `artifacts/compat/compat-summary.json`
 
 ## Release Checklist

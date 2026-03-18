@@ -35,8 +35,10 @@ Disallow duplicate declarations of the same property in a declaration block when
 
 ## Known Divergences from Stylelint
 
+- Imported compatibility suite: `declaration-block-no-duplicate-properties` (`tests/compat/stylelint/imported/declaration-block-no-duplicate-properties.json`).
 - v1 fix behavior is intentionally narrower for idempotency safety.
 - Advanced duplicate option matrix is deferred.
+- Unsupported duplicate-option variants are explicitly skipped via `unsupported_option` entries in `tests/compat/stylelint/skip-manifest.yaml`.
 
 ## Complexity and Performance Notes
 

@@ -41,6 +41,7 @@ v1 scope is intentionally narrow and high-confidence.
 
 ## Known Divergences from Stylelint
 
+- Imported compatibility suite: partial `declaration-property-value-no-unknown` (`tests/compat/stylelint/imported/declaration-property-value-no-unknown.json`).
 - This rule is a subset of Stylelint value-unknown behavior.
 - Multi-token grammar validation is intentionally skipped to avoid noisy false positives.
 - Complex custom grammars and advanced function validation are deferred.

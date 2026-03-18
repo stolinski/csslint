@@ -34,8 +34,10 @@ Disallow selectors that combine type selectors with class/id qualifiers in ways 
 
 ## Known Divergences from Stylelint
 
+- Imported compatibility suite: `selector-no-qualifying-type` (`tests/compat/stylelint/imported/selector-no-qualifying-type.json`).
 - v1 keeps a simpler option surface and conservative matching.
 - Matching uses conservative string segmentation rather than full selector-grammar option coverage.
+- Custom-syntax selector cases (for example nested selector adapters) are explicitly skipped via `custom_syntax` entries in `tests/compat/stylelint/skip-manifest.yaml`.
 
 ## Complexity and Performance Notes
 

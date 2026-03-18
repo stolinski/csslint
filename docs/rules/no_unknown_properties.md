@@ -36,8 +36,10 @@ v1 has no additional ignore list options.
 
 ## Known Divergences from Stylelint
 
+- Imported compatibility suite: `property-no-unknown` (`tests/compat/stylelint/imported/property-no-unknown.json`).
 - v1 intentionally omits advanced ignore options.
 - Unknown detection is based on project metadata and parser normalization path.
+- Unsupported option variants are explicitly skipped via `unsupported_option` entries in `tests/compat/stylelint/skip-manifest.yaml`.
 
 ## Complexity and Performance Notes
 

@@ -35,8 +35,10 @@ Disallow legacy vendor-prefixed properties and values when modern equivalents ar
 
 ## Known Divergences from Stylelint
 
+- Imported compatibility suites: `property-no-vendor-prefix` and `value-no-vendor-prefix` (`tests/compat/stylelint/imported/*.json`).
 - v1 does not attempt full historical browser fallback modeling.
 - Prefix replacement set is explicit and conservative.
+- PostCSS-integrated value-parser cases are explicitly skipped via `postcss_integration` entries in `tests/compat/stylelint/skip-manifest.yaml`.
 
 ## Complexity and Performance Notes
 

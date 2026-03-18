@@ -41,4 +41,19 @@ The commit SHA is intentionally fixed so fixture imports are reproducible.
 
    `python3 scripts/validate_stylelint_skip_manifest.py`
 
-5. Re-run compatibility harness and ratchet checks before merging.
+5. Re-run compatibility summaries before merging:
+
+   - curated PR suite:
+
+     `cargo run -p csslint-test-harness --bin stylelint_compat_report -- --mode fast --output artifacts/compat/compat-fast-summary.json`
+
+   - full imported suite + ratchet enforcement:
+
+     `cargo run -p csslint-test-harness --bin stylelint_compat_report -- --mode full --output artifacts/compat/compat-summary.json --baseline tests/compat/stylelint/baseline/compat-summary.json --enforce-ratchet`
+
+## Baseline Ratchet Policy
+
+- Baseline file: `tests/compat/stylelint/baseline/compat-summary.json`
+- Ratchet compares current summary against baseline global and per-rule pass rates.
+- If pass rate drops, update divergence/deferral docs and refresh baseline in the same change.
+- Release notes should reference the uploaded `artifacts/compat/compat-summary.json` compatibility report.

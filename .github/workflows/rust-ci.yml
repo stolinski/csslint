@@ -119,8 +119,14 @@ jobs:
       - name: Validate skip manifest governance
         run: python3 scripts/validate_stylelint_skip_manifest.py
 
-      - name: Run compat-fast curated suite
-        run: cargo test -p csslint-test-harness --test stylelint_compat_harness compat_fast_suite_passes
+      - name: Generate compat-fast curated summary
+        run: cargo run -p csslint-test-harness --bin stylelint_compat_report -- --mode fast --output artifacts/compat/compat-fast-summary.json
+
+      - name: Upload compat-fast artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: compat-fast-summary
+          path: artifacts/compat/compat-fast-summary.json
 
   compat-full:
     runs-on: ubuntu-latest
@@ -141,8 +147,14 @@ jobs:
       - name: Validate skip manifest governance
         run: python3 scripts/validate_stylelint_skip_manifest.py
 
-      - name: Run compat-full imported suite
-        run: cargo test -p csslint-test-harness --test stylelint_compat_harness compat_full_suite_passes_with_manifest_skips
+      - name: Generate compat-full imported summary with ratchet check
+        run: cargo run -p csslint-test-harness --bin stylelint_compat_report -- --mode full --output artifacts/compat/compat-summary.json --baseline tests/compat/stylelint/baseline/compat-summary.json --enforce-ratchet
+
+      - name: Upload compat-full artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: compat-summary
+          path: artifacts/compat/compat-summary.json
 
   json-schema:
     runs-on: ubuntu-latest
