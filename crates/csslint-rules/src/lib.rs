@@ -249,7 +249,47 @@ fn run_with_registry(
     for active_rule in active_rules {
         diagnostics.extend(active_rule.runtime.into_diagnostics());
     }
+    sort_diagnostics(&mut diagnostics);
     Ok(diagnostics)
+}
+
+pub fn sort_diagnostics(diagnostics: &mut [Diagnostic]) {
+    diagnostics.sort_by(|left, right| {
+        (
+            left.file_id.get(),
+            left.span.start,
+            left.span.end,
+            severity_sort_key(left.severity),
+            left.rule_id.as_str(),
+            left.message.as_str(),
+        )
+            .cmp(&(
+                right.file_id.get(),
+                right.span.start,
+                right.span.end,
+                severity_sort_key(right.severity),
+                right.rule_id.as_str(),
+                right.message.as_str(),
+            ))
+    });
+}
+
+pub fn merge_and_sort_diagnostics(batches: Vec<Vec<Diagnostic>>) -> Vec<Diagnostic> {
+    let total = batches.iter().map(Vec::len).sum();
+    let mut merged = Vec::with_capacity(total);
+    for mut batch in batches {
+        merged.append(&mut batch);
+    }
+    sort_diagnostics(&mut merged);
+    merged
+}
+
+fn severity_sort_key(severity: Severity) -> u8 {
+    match severity {
+        Severity::Off => 0,
+        Severity::Warn => 1,
+        Severity::Error => 2,
+    }
 }
 
 struct ActiveRule {
@@ -382,15 +422,16 @@ mod tests {
     use std::sync::atomic::{AtomicUsize, Ordering};
 
     use csslint_config::Config;
-    use csslint_core::{FileId, RuleId, Scope, Severity, Span};
+    use csslint_core::{Diagnostic, FileId, RuleId, Scope, Severity, Span};
     use csslint_semantic::{
         CssSemanticModel, DeclarationId, DeclarationNode, RuleNode, RuleNodeId, SelectorId,
         SelectorNode, SelectorPart, SelectorPartKind, SemanticIndexes,
     };
 
     use super::{
-        core_registry, run_rules, run_rules_with_config, run_with_registry, Rule, RuleContext,
-        RuleMeta, RuleRegistry, RuleRuntimeCtx, RuleVisitor,
+        core_registry, merge_and_sort_diagnostics, run_rules, run_rules_with_config,
+        run_with_registry, sort_diagnostics, Rule, RuleContext, RuleMeta, RuleRegistry,
+        RuleRuntimeCtx, RuleVisitor,
     };
 
     struct MockRule {
@@ -610,6 +651,74 @@ mod tests {
             run_rules_with_config(&semantic, &config).expect("config should be valid");
         assert_eq!(diagnostics.len(), 1);
         assert_eq!(diagnostics[0].severity, Severity::Error);
+    }
+
+    #[test]
+    fn sorts_diagnostics_with_deterministic_key() {
+        let mut diagnostics = vec![
+            Diagnostic::new(
+                RuleId::from("z_rule"),
+                Severity::Warn,
+                "later rule",
+                Span::new(20, 25),
+                FileId::new(2),
+            ),
+            Diagnostic::new(
+                RuleId::from("a_rule"),
+                Severity::Error,
+                "first rule",
+                Span::new(10, 11),
+                FileId::new(1),
+            ),
+            Diagnostic::new(
+                RuleId::from("a_rule"),
+                Severity::Warn,
+                "same span lower severity",
+                Span::new(10, 11),
+                FileId::new(1),
+            ),
+        ];
+
+        sort_diagnostics(&mut diagnostics);
+
+        assert_eq!(diagnostics[0].file_id, FileId::new(1));
+        assert_eq!(diagnostics[0].severity, Severity::Warn);
+        assert_eq!(diagnostics[1].file_id, FileId::new(1));
+        assert_eq!(diagnostics[1].severity, Severity::Error);
+        assert_eq!(diagnostics[2].file_id, FileId::new(2));
+    }
+
+    #[test]
+    fn merges_batches_then_sorts_globally() {
+        let left = vec![Diagnostic::new(
+            RuleId::from("b_rule"),
+            Severity::Warn,
+            "left",
+            Span::new(30, 40),
+            FileId::new(4),
+        )];
+        let right = vec![
+            Diagnostic::new(
+                RuleId::from("a_rule"),
+                Severity::Warn,
+                "right first",
+                Span::new(5, 6),
+                FileId::new(2),
+            ),
+            Diagnostic::new(
+                RuleId::from("c_rule"),
+                Severity::Warn,
+                "right second",
+                Span::new(7, 8),
+                FileId::new(2),
+            ),
+        ];
+
+        let merged = merge_and_sort_diagnostics(vec![left, right]);
+        assert_eq!(merged.len(), 3);
+        assert_eq!(merged[0].message, "right first");
+        assert_eq!(merged[1].message, "right second");
+        assert_eq!(merged[2].message, "left");
     }
 
     struct EventCountingRule;
