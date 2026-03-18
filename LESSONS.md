@@ -44,3 +44,4 @@
 - Compatibility ratchets are easiest to enforce by versioning a baseline summary artifact and comparing global/per-rule pass rates in CI, instead of hard-coding static percentage thresholds in workflow logic.
 - Native framework fixtures are easier to scale when organized as `tests/native/{vue,svelte}/{extractor,scope,rules}` plus `tests/native/shared/{mapping,fix}`, and mapping cases should assert both byte offsets and line/column under explicit LF/CRLF modes.
 - Svelte fixture selectors must place `:global(...)` at sequence boundaries (for example `.local :global(.x)`), so mixed-scope tests stay valid for the framework parser while still exercising scoped/global part annotation.
+- Framework-native rule regressions are easiest to catch with fixture-level expected counts for `no_global_leaks`, `no_duplicate_selectors`, and `no_overqualified_selectors` across Vue scoped/module/plain and Svelte default-scoped contexts.

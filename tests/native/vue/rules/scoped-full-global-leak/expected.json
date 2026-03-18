@@ -1,0 +1,7 @@
+{
+  "rule_counts": {
+    "no_global_leaks": 1,
+    "no_duplicate_selectors": 0,
+    "no_overqualified_selectors": 0
+  }
+}
