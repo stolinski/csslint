@@ -5,6 +5,7 @@ use std::env;
 use std::fmt;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::time::Instant;
 
 use csslint_config::{format_diagnostics, load_for_target, parse_target_profile};
 use csslint_core::{Diagnostic, FileId, LineIndex};
@@ -102,10 +103,42 @@ impl fmt::Display for CliError {
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct JsonResult {
+    schema_version: u8,
+    tool: &'static str,
+    summary: JsonSummary,
+    diagnostics: Vec<RenderedDiagnostic>,
+    internal_errors: Vec<JsonInternalError>,
+    timing: JsonTiming,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct JsonSummary {
     files_scanned: usize,
     files_linted: usize,
+    errors: usize,
+    warnings: usize,
     fixes_applied: usize,
-    diagnostics: Vec<RenderedDiagnostic>,
+    duration_ms: usize,
+    exit_code: i32,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct JsonInternalError {
+    kind: String,
+    message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    file_path: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct JsonTiming {
+    parse_ms: usize,
+    semantic_ms: usize,
+    rules_ms: usize,
+    fix_ms: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -115,6 +148,24 @@ struct LintResult {
     fixes_applied: usize,
     diagnostics: Vec<RenderedDiagnostic>,
     file_sources: BTreeMap<String, String>,
+    internal_errors: Vec<InternalError>,
+    timing: PhaseTiming,
+    duration_ms: usize,
+}
+
+#[derive(Debug, Clone)]
+struct InternalError {
+    kind: String,
+    message: String,
+    file_path: Option<String>,
+}
+
+#[derive(Debug, Clone, Default)]
+struct PhaseTiming {
+    parse_ms: usize,
+    semantic_ms: usize,
+    rules_ms: usize,
+    fix_ms: usize,
 }
 
 impl LintResult {
@@ -133,6 +184,10 @@ impl LintResult {
     }
 
     fn exit_code(&self) -> i32 {
+        if !self.internal_errors.is_empty() {
+            return 2;
+        }
+
         if self.error_count() > 0 {
             1
         } else {
@@ -274,6 +329,7 @@ where
 }
 
 fn run_lint(options: &CliOptions) -> Result<LintResult, CliError> {
+    let run_started_at = Instant::now();
     let loaded_config = load_for_target(&options.target_path, options.config_path.as_deref())
         .map_err(|diagnostics| CliError::config(format_diagnostics(&diagnostics)))?;
     let config = loaded_config.config;
@@ -294,6 +350,7 @@ fn run_lint(options: &CliOptions) -> Result<LintResult, CliError> {
     let mut file_sources: BTreeMap<String, String> = BTreeMap::new();
     let mut diagnostics: Vec<Diagnostic> = Vec::new();
     let mut fixes_applied = 0usize;
+    let mut timing = PhaseTiming::default();
 
     for (index, file_path) in target_files.iter().enumerate() {
         let file_id = FileId::new(index as u32);
@@ -309,16 +366,28 @@ fn run_lint(options: &CliOptions) -> Result<LintResult, CliError> {
         diagnostics.extend(extraction.diagnostics);
 
         for style in extraction.styles {
-            match parse_style_with_options(
+            let parse_started_at = Instant::now();
+            let parsed_style = parse_style_with_options(
                 &style,
                 CssParserOptions {
                     enable_recovery: false,
                     targets: target_profile,
                 },
-            ) {
+            );
+            timing.parse_ms += parse_started_at.elapsed().as_millis() as usize;
+
+            match parsed_style {
                 Ok(parsed) => {
+                    let semantic_started_at = Instant::now();
                     let semantic = build_semantic_model(&parsed);
-                    match run_rules_with_config_and_targets(&semantic, &config, target_profile) {
+                    timing.semantic_ms += semantic_started_at.elapsed().as_millis() as usize;
+
+                    let rules_started_at = Instant::now();
+                    let rule_results =
+                        run_rules_with_config_and_targets(&semantic, &config, target_profile);
+                    timing.rules_ms += rules_started_at.elapsed().as_millis() as usize;
+
+                    match rule_results {
                         Ok(rule_diagnostics) => diagnostics.extend(rule_diagnostics),
                         Err(config_diagnostics) => {
                             let message = config_diagnostics
@@ -335,6 +404,7 @@ fn run_lint(options: &CliOptions) -> Result<LintResult, CliError> {
         }
 
         if options.fix {
+            let fix_started_at = Instant::now();
             let file_fixes = diagnostics
                 .iter()
                 .filter(|diagnostic| diagnostic.file_id == file_id)
@@ -351,6 +421,7 @@ fn run_lint(options: &CliOptions) -> Result<LintResult, CliError> {
                 })?;
                 fixes_applied += applied;
             }
+            timing.fix_ms += fix_started_at.elapsed().as_millis() as usize;
         }
     }
 
@@ -366,6 +437,9 @@ fn run_lint(options: &CliOptions) -> Result<LintResult, CliError> {
         fixes_applied,
         diagnostics: rendered,
         file_sources,
+        internal_errors: Vec::new(),
+        timing,
+        duration_ms: run_started_at.elapsed().as_millis() as usize,
     })
 }
 
@@ -422,17 +496,44 @@ fn print_pretty(result: &LintResult, code_frame: bool) {
 }
 
 fn print_json(result: &LintResult) {
-    let payload = JsonResult {
-        files_scanned: result.files_scanned,
-        files_linted: result.files_linted,
-        fixes_applied: result.fixes_applied,
-        diagnostics: result.diagnostics.clone(),
-    };
-
-    match serde_json::to_string_pretty(&payload) {
+    match render_json(result) {
         Ok(json) => println!("{json}"),
         Err(error) => eprintln!("csslint runtime_error: failed to serialize json output: {error}"),
     }
+}
+
+fn render_json(result: &LintResult) -> Result<String, serde_json::Error> {
+    let payload = JsonResult {
+        schema_version: 1,
+        tool: "csslint",
+        summary: JsonSummary {
+            files_scanned: result.files_scanned,
+            files_linted: result.files_linted,
+            errors: result.error_count(),
+            warnings: result.warning_count(),
+            fixes_applied: result.fixes_applied,
+            duration_ms: result.duration_ms,
+            exit_code: result.exit_code(),
+        },
+        diagnostics: result.diagnostics.clone(),
+        internal_errors: result
+            .internal_errors
+            .iter()
+            .map(|error| JsonInternalError {
+                kind: error.kind.clone(),
+                message: error.message.clone(),
+                file_path: error.file_path.clone(),
+            })
+            .collect(),
+        timing: JsonTiming {
+            parse_ms: result.timing.parse_ms,
+            semantic_ms: result.timing.semantic_ms,
+            rules_ms: result.timing.rules_ms,
+            fix_ms: result.timing.fix_ms,
+        },
+    };
+
+    serde_json::to_string_pretty(&payload)
 }
 
 fn render_pretty(result: &LintResult, code_frame: bool) -> String {
@@ -591,8 +692,9 @@ mod tests {
     use std::time::{SystemTime, UNIX_EPOCH};
 
     use super::{
-        discover_target_files, parse_cli_options, render_pretty, CliErrorKind, CliOptions,
-        LintResult, OutputFormat, RenderedDiagnostic, RenderedFix, RenderedSpan,
+        discover_target_files, parse_cli_options, render_json, render_pretty, CliErrorKind,
+        CliOptions, LintResult, OutputFormat, PhaseTiming, RenderedDiagnostic, RenderedFix,
+        RenderedSpan,
     };
 
     #[test]
@@ -779,6 +881,9 @@ mod tests {
                 },
             }],
             file_sources,
+            internal_errors: Vec::new(),
+            timing: PhaseTiming::default(),
+            duration_ms: 5,
         };
 
         let first = render_pretty(&result, true);
@@ -789,6 +894,56 @@ mod tests {
         assert!(first.contains("Summary:"));
         assert!(first.contains("^"));
         assert!(!without_frame.contains("^"));
+    }
+
+    #[test]
+    fn json_reporter_emits_schema_v1_shape() {
+        let result = LintResult {
+            files_scanned: 1,
+            files_linted: 1,
+            fixes_applied: 0,
+            diagnostics: vec![RenderedDiagnostic {
+                file_path: "src/main.css".to_string(),
+                rule_id: "no_empty_rules".to_string(),
+                severity: "warn".to_string(),
+                message: "Example diagnostic".to_string(),
+                span: RenderedSpan {
+                    start_offset: 0,
+                    end_offset: 3,
+                    start_line: 1,
+                    start_column: 1,
+                    end_line: 1,
+                    end_column: 4,
+                },
+                fix: RenderedFix {
+                    available: false,
+                    start_offset: None,
+                    end_offset: None,
+                    replacement: None,
+                },
+            }],
+            file_sources: BTreeMap::new(),
+            internal_errors: Vec::new(),
+            timing: PhaseTiming {
+                parse_ms: 1,
+                semantic_ms: 1,
+                rules_ms: 1,
+                fix_ms: 0,
+            },
+            duration_ms: 3,
+        };
+
+        let json = render_json(&result).expect("json serialization should succeed");
+        let value: serde_json::Value =
+            serde_json::from_str(&json).expect("json output should be valid json");
+
+        assert_eq!(value["schemaVersion"], 1);
+        assert_eq!(value["tool"], "csslint");
+        assert!(value.get("summary").is_some());
+        assert!(value.get("diagnostics").is_some());
+        assert!(value.get("internalErrors").is_some());
+        assert!(value.get("timing").is_some());
+        assert!(value["diagnostics"][0].get("fix").is_some());
     }
 
     struct TempFixture {
