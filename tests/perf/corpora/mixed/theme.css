@@ -1,0 +1,8 @@
+.theme {
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
+
+.theme .badge {
+  -webkit-transform: translateX(0);
+}

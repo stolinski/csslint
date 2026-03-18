@@ -2,6 +2,7 @@
 
 use csslint_core::{FileId, Span};
 
+pub mod perf;
 pub mod stylelint_compat;
 
 pub fn fixture_root() -> &'static str {

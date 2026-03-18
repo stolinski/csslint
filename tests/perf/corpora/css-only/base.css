@@ -1,0 +1,18 @@
+:root {
+  --brand: #0b7285;
+}
+
+body {
+  margin: 0;
+  font-family: sans-serif;
+}
+
+.button {
+  padding-left: 12px;
+  padding-right: 12px;
+  color: var(--brand);
+}
+
+.button {
+  color: var(--brand);
+}

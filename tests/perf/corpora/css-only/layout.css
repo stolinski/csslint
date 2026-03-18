@@ -1,0 +1,15 @@
+.layout {
+  display: grid;
+  grid-template-columns: 1fr 2fr;
+  gap: 16px;
+}
+
+.layout .panel {
+  margin-left: 8px;
+  margin-right: 8px;
+}
+
+.layout .panel {
+  margin-left: 8px;
+  margin-right: 8px;
+}
