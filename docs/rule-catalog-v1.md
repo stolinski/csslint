@@ -112,3 +112,5 @@ Detailed behavior, options, and divergences live in:
 Deferred plugin candidate:
 
 - `docs/rules/no_unused_scoped_selectors.md`
+
+`no_unused_scoped_selectors` remains outside the core v1 rule ID set and must be rejected as an unknown rule in `.csslint` until plugin loading is enabled.

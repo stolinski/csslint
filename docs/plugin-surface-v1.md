@@ -86,6 +86,11 @@ Future config shape (reserved, not active in v1 runtime):
 
 Until runtime plugin loading exists, v1 treats plugin packs as compile-time linked extensions.
 
+Core config behavior in v1:
+
+- `no_unused_scoped_selectors` is not a valid core rule key and must be rejected as an unknown rule ID.
+- Use plugin namespaced IDs only when plugin rule loading is available.
+
 ## Candidate Use Case: Unused Scoped Selectors
 
 `no_unused_scoped_selectors` is deferred from core v1 defaults and is the reference use case for this plugin surface.

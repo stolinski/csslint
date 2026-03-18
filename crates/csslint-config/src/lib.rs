@@ -40,11 +40,35 @@ pub fn parse_severity(raw: &str) -> Result<Severity, String> {
     }
 }
 
+fn is_known_core_rule_id(rule_id: &str) -> bool {
+    matches!(
+        rule_id,
+        "no_unknown_properties"
+            | "no_invalid_values"
+            | "no_duplicate_selectors"
+            | "no_duplicate_declarations"
+            | "no_empty_rules"
+            | "no_legacy_vendor_prefixes"
+            | "no_overqualified_selectors"
+            | "prefer_logical_properties"
+            | "no_global_leaks"
+            | "no_deprecated_features"
+    )
+}
+
 pub fn from_raw_rules(raw: &BTreeMap<String, String>) -> Result<Config, Vec<ConfigDiagnostic>> {
     let mut rules = BTreeMap::new();
     let mut diagnostics = Vec::new();
 
     for (key, value) in raw {
+        if !is_known_core_rule_id(key) {
+            diagnostics.push(ConfigDiagnostic {
+                key: Some(key.clone()),
+                message: format!("Unknown rule id '{key}'"),
+            });
+            continue;
+        }
+
         match parse_severity(value) {
             Ok(severity) => {
                 rules.insert(RuleId::from(key.clone()), severity);
@@ -93,5 +117,20 @@ mod tests {
         let diagnostics = from_raw_rules(&raw).expect_err("invalid severity should fail");
         assert_eq!(diagnostics.len(), 1);
         assert_eq!(diagnostics[0].key.as_deref(), Some("no_global_leaks"));
+    }
+
+    #[test]
+    fn rejects_unknown_rule_ids_including_deferred_plugin_candidates() {
+        let mut raw = BTreeMap::new();
+        raw.insert("no_empty_rules".to_string(), "warn".to_string());
+        raw.insert("no_unused_scoped_selectors".to_string(), "warn".to_string());
+
+        let diagnostics = from_raw_rules(&raw).expect_err("unknown rule id should fail");
+        assert_eq!(diagnostics.len(), 1);
+        assert_eq!(
+            diagnostics[0].key.as_deref(),
+            Some("no_unused_scoped_selectors")
+        );
+        assert!(diagnostics[0].message.contains("Unknown rule id"));
     }
 }
