@@ -2,6 +2,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::panic::{self, AssertUnwindSafe};
+use std::time::Instant;
 
 use csslint_config::Config;
 use csslint_core::{Diagnostic, FileId, Fix, RuleId, Scope, Severity, Span, TargetProfile};
@@ -23,6 +24,19 @@ pub struct RuleMeta {
 pub struct ConfigDiagnostic {
     pub rule_id: Option<RuleId>,
     pub message: String,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct RuleProfileStat {
+    pub rule_id: RuleId,
+    pub elapsed_ms: f64,
+    pub diagnostics_emitted: usize,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct RuleRunOutput {
+    pub diagnostics: Vec<Diagnostic>,
+    pub profile: Vec<RuleProfileStat>,
 }
 
 pub struct RuleVisitor {
@@ -319,6 +333,15 @@ pub fn run_rules_with_config_and_targets(
     target_profile: TargetProfile,
 ) -> Result<Vec<Diagnostic>, Vec<ConfigDiagnostic>> {
     let registry = core_registry();
+    run_with_registry(semantic, &registry, config, target_profile).map(|output| output.diagnostics)
+}
+
+pub fn run_rules_profiled_with_config_and_targets(
+    semantic: &CssSemanticModel,
+    config: &Config,
+    target_profile: TargetProfile,
+) -> Result<RuleRunOutput, Vec<ConfigDiagnostic>> {
+    let registry = core_registry();
     run_with_registry(semantic, &registry, config, target_profile)
 }
 
@@ -327,7 +350,7 @@ fn run_with_registry(
     registry: &RuleRegistry,
     config: &Config,
     target_profile: TargetProfile,
-) -> Result<Vec<Diagnostic>, Vec<ConfigDiagnostic>> {
+) -> Result<RuleRunOutput, Vec<ConfigDiagnostic>> {
     let known_rule_ids = registry
         .ordered_meta()
         .into_iter()
@@ -368,11 +391,13 @@ fn run_with_registry(
             target_profile,
         });
         active_rules.push(ActiveRule {
+            rule_id: meta.id.clone(),
             on_selector: visitor.on_selector,
             on_declaration: visitor.on_declaration,
             on_rule: visitor.on_rule,
             runtime: RuleRuntimeCtx::new(semantic.file_id, meta.id, severity, target_profile),
             failed: false,
+            elapsed_ms: 0.0,
         });
     }
 
@@ -408,9 +433,11 @@ fn run_with_registry(
                 continue;
             }
 
+            let callback_started = Instant::now();
             let result = panic::catch_unwind(AssertUnwindSafe(|| {
                 (subscriber.callback)(semantic, node, &mut active_rule.runtime)
             }));
+            active_rule.elapsed_ms += callback_started.elapsed().as_secs_f64() * 1000.0;
             if result.is_err() {
                 active_rule.failed = true;
                 active_rule.runtime.report_rule_runtime_failure(
@@ -428,9 +455,11 @@ fn run_with_registry(
                 continue;
             }
 
+            let callback_started = Instant::now();
             let result = panic::catch_unwind(AssertUnwindSafe(|| {
                 (subscriber.callback)(semantic, node, &mut active_rule.runtime)
             }));
+            active_rule.elapsed_ms += callback_started.elapsed().as_secs_f64() * 1000.0;
             if result.is_err() {
                 active_rule.failed = true;
                 active_rule.runtime.report_rule_runtime_failure(
@@ -448,9 +477,11 @@ fn run_with_registry(
                 continue;
             }
 
+            let callback_started = Instant::now();
             let result = panic::catch_unwind(AssertUnwindSafe(|| {
                 (subscriber.callback)(semantic, node, &mut active_rule.runtime)
             }));
+            active_rule.elapsed_ms += callback_started.elapsed().as_secs_f64() * 1000.0;
             if result.is_err() {
                 active_rule.failed = true;
                 active_rule.runtime.report_rule_runtime_failure(
@@ -462,11 +493,27 @@ fn run_with_registry(
     }
 
     let mut diagnostics = Vec::new();
+    let mut profile = Vec::new();
     for active_rule in active_rules {
+        let diagnostic_count = active_rule.runtime.diagnostics.len();
         diagnostics.extend(active_rule.runtime.into_diagnostics());
+        profile.push(RuleProfileStat {
+            rule_id: active_rule.rule_id,
+            elapsed_ms: active_rule.elapsed_ms,
+            diagnostics_emitted: diagnostic_count,
+        });
     }
     sort_diagnostics(&mut diagnostics);
-    Ok(diagnostics)
+    profile.sort_by(|left, right| {
+        right
+            .elapsed_ms
+            .total_cmp(&left.elapsed_ms)
+            .then_with(|| left.rule_id.as_str().cmp(right.rule_id.as_str()))
+    });
+    Ok(RuleRunOutput {
+        diagnostics,
+        profile,
+    })
 }
 
 pub fn sort_diagnostics(diagnostics: &mut [Diagnostic]) {
@@ -509,11 +556,13 @@ fn severity_sort_key(severity: Severity) -> u8 {
 }
 
 struct ActiveRule {
+    rule_id: RuleId,
     on_selector: Option<SelectorCallback>,
     on_declaration: Option<DeclarationCallback>,
     on_rule: Option<RuleNodeCallback>,
     runtime: RuleRuntimeCtx,
     failed: bool,
+    elapsed_ms: f64,
 }
 
 struct RuleSubscriber {
@@ -2173,7 +2222,7 @@ mod tests {
         let diagnostics =
             run_with_registry(&semantic, &registry, &empty_config, TargetProfile::Defaults)
                 .expect("dispatch should run without config diagnostics");
-        assert_eq!(diagnostics.len(), 5);
+        assert_eq!(diagnostics.diagnostics.len(), 5);
     }
 
     #[test]
@@ -2360,11 +2409,13 @@ mod tests {
         let diagnostics =
             run_with_registry(&semantic, &registry, &empty_config, TargetProfile::Defaults)
                 .expect("panic containment should not emit config diagnostics");
-        assert_eq!(diagnostics.len(), 2);
+        assert_eq!(diagnostics.diagnostics.len(), 2);
         assert!(diagnostics
+            .diagnostics
             .iter()
             .any(|diagnostic| diagnostic.message.contains("panic was contained")));
         assert!(diagnostics
+            .diagnostics
             .iter()
             .any(|diagnostic| diagnostic.message == "safe rule still ran"));
     }

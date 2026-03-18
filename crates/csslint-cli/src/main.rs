@@ -12,7 +12,7 @@ use csslint_core::{Diagnostic, FileId, LineIndex};
 use csslint_extractor::extract_styles;
 use csslint_fix::apply_fixes;
 use csslint_parser::{parse_style_with_options, CssParserOptions};
-use csslint_rules::{run_rules_with_config_and_targets, sort_diagnostics};
+use csslint_rules::{run_rules_profiled_with_config_and_targets, sort_diagnostics};
 use csslint_semantic::build_semantic_model;
 use serde::Serialize;
 
@@ -20,7 +20,7 @@ fn main() {
     let exit_code = match parse_cli_options(env::args()) {
         Ok(options) => match run_lint(&options) {
             Ok(result) => {
-                print_result(&result, options.format, options.code_frame);
+                print_result(&result, options.format, options.code_frame, options.profile);
                 result.exit_code()
             }
             Err(error) => {
@@ -53,6 +53,7 @@ struct CliOptions {
     config_path: Option<PathBuf>,
     targets_override: Option<String>,
     code_frame: bool,
+    profile: bool,
     fix: bool,
     format: OutputFormat,
 }
@@ -155,6 +156,20 @@ struct LintResult {
     internal_errors: Vec<InternalError>,
     timing: PhaseTiming,
     duration_ms: usize,
+    file_profile: Vec<FileProfile>,
+    rule_profile: BTreeMap<String, RuleProfileEntry>,
+}
+
+#[derive(Debug, Clone)]
+struct FileProfile {
+    path: String,
+    total_ms: f64,
+}
+
+#[derive(Debug, Clone, Default)]
+struct RuleProfileEntry {
+    elapsed_ms: f64,
+    diagnostics_emitted: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -245,6 +260,7 @@ where
     let mut config_path: Option<PathBuf> = None;
     let mut targets_override: Option<String> = None;
     let mut code_frame = false;
+    let mut profile = false;
     let mut fix = false;
     let mut format = OutputFormat::Pretty;
 
@@ -255,6 +271,9 @@ where
             }
             "--code-frame" => {
                 code_frame = true;
+            }
+            "--profile" => {
+                profile = true;
             }
             "--config" => {
                 let Some(value) = args.next() else {
@@ -299,7 +318,7 @@ where
             }
             "-h" | "--help" => {
                 return Err(CliError::usage(
-                    "usage: csslint <path> [--config <path>] [--targets <profile>] [--code-frame] [--fix] [--format json|pretty]",
+                    "usage: csslint <path> [--config <path>] [--targets <profile>] [--code-frame] [--profile] [--fix] [--format json|pretty]",
                 ));
             }
             _ if arg.starts_with('-') => {
@@ -318,7 +337,7 @@ where
 
     let Some(target_path) = target_path else {
         return Err(CliError::usage(
-            "missing path argument; usage: csslint <path> [--config <path>] [--targets <profile>] [--code-frame] [--fix] [--format json|pretty]",
+            "missing path argument; usage: csslint <path> [--config <path>] [--targets <profile>] [--code-frame] [--profile] [--fix] [--format json|pretty]",
         ));
     };
 
@@ -327,6 +346,7 @@ where
         config_path,
         targets_override,
         code_frame,
+        profile,
         fix,
         format,
     })
@@ -355,8 +375,11 @@ fn run_lint(options: &CliOptions) -> Result<LintResult, CliError> {
     let mut diagnostics: Vec<Diagnostic> = Vec::new();
     let mut fixes_applied = 0usize;
     let mut timing = PhaseTiming::default();
+    let mut file_profile = Vec::new();
+    let mut rule_profile: BTreeMap<String, RuleProfileEntry> = BTreeMap::new();
 
     for (index, file_path) in target_files.iter().enumerate() {
+        let file_started_at = Instant::now();
         let file_id = FileId::new(index as u32);
         let source = fs::read_to_string(file_path).map_err(|error| {
             CliError::runtime(format!("failed to read '{}': {error}", file_path.display()))
@@ -387,12 +410,24 @@ fn run_lint(options: &CliOptions) -> Result<LintResult, CliError> {
                     timing.semantic_ms += semantic_started_at.elapsed().as_millis() as usize;
 
                     let rules_started_at = Instant::now();
-                    let rule_results =
-                        run_rules_with_config_and_targets(&semantic, &config, target_profile);
+                    let rule_results = run_rules_profiled_with_config_and_targets(
+                        &semantic,
+                        &config,
+                        target_profile,
+                    );
                     timing.rules_ms += rules_started_at.elapsed().as_millis() as usize;
 
                     match rule_results {
-                        Ok(rule_diagnostics) => diagnostics.extend(rule_diagnostics),
+                        Ok(rule_output) => {
+                            diagnostics.extend(rule_output.diagnostics);
+                            for profile_stat in rule_output.profile {
+                                let entry = rule_profile
+                                    .entry(profile_stat.rule_id.as_str().to_string())
+                                    .or_default();
+                                entry.elapsed_ms += profile_stat.elapsed_ms;
+                                entry.diagnostics_emitted += profile_stat.diagnostics_emitted;
+                            }
+                        }
                         Err(config_diagnostics) => {
                             let message = config_diagnostics
                                 .iter()
@@ -427,6 +462,11 @@ fn run_lint(options: &CliOptions) -> Result<LintResult, CliError> {
             }
             timing.fix_ms += fix_started_at.elapsed().as_millis() as usize;
         }
+
+        file_profile.push(FileProfile {
+            path: file_path.to_string_lossy().to_string(),
+            total_ms: file_started_at.elapsed().as_secs_f64() * 1000.0,
+        });
     }
 
     sort_diagnostics(&mut diagnostics);
@@ -444,6 +484,8 @@ fn run_lint(options: &CliOptions) -> Result<LintResult, CliError> {
         internal_errors: Vec::new(),
         timing,
         duration_ms: run_started_at.elapsed().as_millis() as usize,
+        file_profile,
+        rule_profile,
     })
 }
 
@@ -487,10 +529,14 @@ fn render_diagnostic(
     })
 }
 
-fn print_result(result: &LintResult, format: OutputFormat, code_frame: bool) {
+fn print_result(result: &LintResult, format: OutputFormat, code_frame: bool, profile: bool) {
     match format {
         OutputFormat::Pretty => print_pretty(result, code_frame),
         OutputFormat::Json => print_json(result),
+    }
+
+    if profile {
+        print_profile_report(result);
     }
 }
 
@@ -541,6 +587,52 @@ fn print_json_error(error: &CliError) {
         Err(serialize_error) => {
             eprintln!("csslint runtime_error: failed to serialize json output: {serialize_error}")
         }
+    }
+}
+
+fn print_profile_report(result: &LintResult) {
+    let mut files = result.file_profile.clone();
+    files.sort_by(|left, right| {
+        right
+            .total_ms
+            .total_cmp(&left.total_ms)
+            .then_with(|| left.path.cmp(&right.path))
+    });
+
+    let mut rules = result
+        .rule_profile
+        .iter()
+        .map(|(rule_id, stats)| (rule_id.clone(), stats.clone()))
+        .collect::<Vec<_>>();
+    rules.sort_by(|left, right| {
+        right
+            .1
+            .elapsed_ms
+            .total_cmp(&left.1.elapsed_ms)
+            .then_with(|| left.0.cmp(&right.0))
+    });
+
+    eprintln!("Profile Summary");
+    eprintln!(
+        "  phases: parse={}ms semantic={}ms rules={}ms fix={}ms total={}ms",
+        result.timing.parse_ms,
+        result.timing.semantic_ms,
+        result.timing.rules_ms,
+        result.timing.fix_ms,
+        result.duration_ms
+    );
+
+    eprintln!("  top slow files:");
+    for file in files.iter().take(5) {
+        eprintln!("    - {:.2}ms  {}", file.total_ms, file.path);
+    }
+
+    eprintln!("  top expensive rules:");
+    for (rule_id, stats) in rules.iter().take(5) {
+        eprintln!(
+            "    - {:.2}ms  {}  (diagnostics={})",
+            stats.elapsed_ms, rule_id, stats.diagnostics_emitted
+        );
     }
 }
 
@@ -757,6 +849,7 @@ mod tests {
                 config_path: None,
                 targets_override: None,
                 code_frame: false,
+                profile: false,
                 fix: true,
                 format: OutputFormat::Json,
             }
@@ -820,6 +913,18 @@ mod tests {
         .expect("code frame flag should parse");
 
         assert!(parsed.code_frame);
+    }
+
+    #[test]
+    fn parse_cli_options_accepts_profile_flag() {
+        let parsed = parse_cli_options([
+            "csslint".to_string(),
+            "src".to_string(),
+            "--profile".to_string(),
+        ])
+        .expect("profile flag should parse");
+
+        assert!(parsed.profile);
     }
 
     #[test]
@@ -926,6 +1031,8 @@ mod tests {
             internal_errors: Vec::new(),
             timing: PhaseTiming::default(),
             duration_ms: 5,
+            file_profile: Vec::new(),
+            rule_profile: BTreeMap::new(),
         };
 
         let first = render_pretty(&result, true);
@@ -973,6 +1080,8 @@ mod tests {
                 fix_ms: 0,
             },
             duration_ms: 3,
+            file_profile: Vec::new(),
+            rule_profile: BTreeMap::new(),
         };
 
         let json = render_json(&result).expect("json serialization should succeed");

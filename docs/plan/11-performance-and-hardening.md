@@ -101,7 +101,7 @@ Add optional internal profiling output:
 - top N slow files
 - top N expensive rules
 
-Keep this behind debug/profiling flag in v1.
+Keep this behind a debug/profiling flag in v1 (`--profile`).
 
 ## Deliverables
 
