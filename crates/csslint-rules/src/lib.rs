@@ -277,6 +277,8 @@ pub fn core_registry() -> RuleRegistry {
     let _ = registry.register(NoDuplicateSelectors);
     let _ = registry.register(NoUnknownProperties);
     let _ = registry.register(NoOverqualifiedSelectors);
+    let _ = registry.register(NoInvalidValues);
+    let _ = registry.register(NoDeprecatedFeatures);
 
     for meta in placeholder_rule_metas() {
         let _ = registry.register(PlaceholderRule { meta });
@@ -507,6 +509,8 @@ struct NoLegacyVendorPrefixes;
 struct NoDuplicateSelectors;
 struct NoUnknownProperties;
 struct NoOverqualifiedSelectors;
+struct NoInvalidValues;
+struct NoDeprecatedFeatures;
 
 struct PlaceholderRule {
     meta: RuleMeta,
@@ -626,6 +630,44 @@ impl Rule for NoOverqualifiedSelectors {
     }
 }
 
+impl Rule for NoInvalidValues {
+    fn meta(&self) -> RuleMeta {
+        RuleMeta {
+            id: RuleId::from("no_invalid_values"),
+            description: "Disallow invalid declaration values in v1 high-confidence subset",
+            default_severity: Severity::Error,
+            fixable: false,
+        }
+    }
+
+    fn create(&self, _ctx: RuleContext<'_>) -> RuleVisitor {
+        RuleVisitor {
+            on_selector: None,
+            on_declaration: Some(no_invalid_values_on_declaration),
+            on_rule: None,
+        }
+    }
+}
+
+impl Rule for NoDeprecatedFeatures {
+    fn meta(&self) -> RuleMeta {
+        RuleMeta {
+            id: RuleId::from("no_deprecated_features"),
+            description: "Disallow deprecated CSS features for v1 baseline targets",
+            default_severity: Severity::Warn,
+            fixable: false,
+        }
+    }
+
+    fn create(&self, _ctx: RuleContext<'_>) -> RuleVisitor {
+        RuleVisitor {
+            on_selector: None,
+            on_declaration: Some(no_deprecated_features_on_declaration),
+            on_rule: Some(no_deprecated_features_on_rule),
+        }
+    }
+}
+
 impl Rule for PlaceholderRule {
     fn meta(&self) -> RuleMeta {
         self.meta.clone()
@@ -639,12 +681,6 @@ impl Rule for PlaceholderRule {
 fn placeholder_rule_metas() -> Vec<RuleMeta> {
     vec![
         RuleMeta {
-            id: RuleId::from("no_invalid_values"),
-            description: "Disallow invalid declaration values",
-            default_severity: Severity::Error,
-            fixable: false,
-        },
-        RuleMeta {
             id: RuleId::from("prefer_logical_properties"),
             description: "Prefer logical over physical properties",
             default_severity: Severity::Warn,
@@ -654,12 +690,6 @@ fn placeholder_rule_metas() -> Vec<RuleMeta> {
             id: RuleId::from("no_global_leaks"),
             description: "Disallow accidental global selector leaks in scoped styles",
             default_severity: Severity::Error,
-            fixable: false,
-        },
-        RuleMeta {
-            id: RuleId::from("no_deprecated_features"),
-            description: "Disallow deprecated CSS features for configured targets",
-            default_severity: Severity::Warn,
             fixable: false,
         },
     ]
@@ -772,6 +802,117 @@ fn no_overqualified_selectors_on_selector(
         ctx.report(
             format!("Overqualified selector '{}' detected", selector.normalized),
             selector.span,
+        );
+    }
+}
+
+fn no_invalid_values_on_declaration(
+    _semantic: &CssSemanticModel,
+    declaration: &DeclarationNode,
+    ctx: &mut RuleRuntimeCtx,
+) {
+    if declaration.property.starts_with("--") || !declaration.property_known {
+        return;
+    }
+
+    let normalized_value = normalize_value_for_checks(&declaration.value);
+    if normalized_value.is_empty() {
+        ctx.report(
+            format!(
+                "Invalid value for property '{}': value cannot be empty",
+                declaration.property
+            ),
+            declaration.span,
+        );
+        return;
+    }
+
+    if is_css_wide_keyword(normalized_value) {
+        return;
+    }
+
+    let property = declaration.property.to_ascii_lowercase();
+    let invalid = match property.as_str() {
+        "display" => keyword_value_is_invalid(normalized_value, &DISPLAY_KEYWORDS),
+        "position" => keyword_value_is_invalid(normalized_value, &POSITION_KEYWORDS),
+        "visibility" => keyword_value_is_invalid(normalized_value, &VISIBILITY_KEYWORDS),
+        "box-sizing" => keyword_value_is_invalid(normalized_value, &BOX_SIZING_KEYWORDS),
+        "overflow" | "overflow-x" | "overflow-y" => {
+            keyword_value_is_invalid(normalized_value, &OVERFLOW_KEYWORDS)
+        }
+        "flex-direction" => keyword_value_is_invalid(normalized_value, &FLEX_DIRECTION_KEYWORDS),
+        "flex-wrap" => keyword_value_is_invalid(normalized_value, &FLEX_WRAP_KEYWORDS),
+        "opacity" => opacity_value_is_invalid(normalized_value),
+        _ => false,
+    };
+
+    if invalid {
+        ctx.report(
+            format!(
+                "Invalid value '{}' for property '{}' in v1 validation subset",
+                normalized_value, declaration.property
+            ),
+            declaration.span,
+        );
+    }
+}
+
+fn no_deprecated_features_on_declaration(
+    _semantic: &CssSemanticModel,
+    declaration: &DeclarationNode,
+    ctx: &mut RuleRuntimeCtx,
+) {
+    let property = declaration.property.to_ascii_lowercase();
+    if DEPRECATED_PROPERTIES.contains(&property.as_str()) {
+        ctx.report(
+            format!(
+                "Deprecated feature '{}' is disallowed for {} targets",
+                declaration.property, DEPRECATION_TARGET_PROFILE
+            ),
+            declaration.span,
+        );
+        return;
+    }
+
+    if property != "display" {
+        return;
+    }
+
+    let normalized_value = normalize_value_for_checks(&declaration.value);
+    if DISPLAY_DEPRECATED_VALUES
+        .iter()
+        .any(|deprecated| normalized_value.eq_ignore_ascii_case(deprecated))
+    {
+        ctx.report(
+            format!(
+                "Deprecated display value '{}' is disallowed for {} targets",
+                normalized_value, DEPRECATION_TARGET_PROFILE
+            ),
+            declaration.span,
+        );
+    }
+}
+
+fn no_deprecated_features_on_rule(
+    semantic: &CssSemanticModel,
+    rule: &RuleNode,
+    ctx: &mut RuleRuntimeCtx,
+) {
+    if !rule.is_at_rule {
+        return;
+    }
+
+    let Some(name) = at_rule_name_from_source(semantic, rule) else {
+        return;
+    };
+
+    if DEPRECATED_AT_RULES.contains(&name.as_str()) {
+        ctx.report(
+            format!(
+                "Deprecated at-rule '@{}' is disallowed for {} targets",
+                name, DEPRECATION_TARGET_PROFILE
+            ),
+            rule.span,
         );
     }
 }
@@ -1051,7 +1192,126 @@ fn has_class_or_id_qualifier(tail: &[u8]) -> bool {
     false
 }
 
+fn keyword_value_is_invalid(value: &str, allowed_keywords: &[&str]) -> bool {
+    if value.is_empty() || contains_dynamic_css_function(value) {
+        return false;
+    }
+
+    if !is_single_identifier(value) {
+        return false;
+    }
+
+    !allowed_keywords
+        .iter()
+        .any(|allowed| value.eq_ignore_ascii_case(allowed))
+}
+
+fn opacity_value_is_invalid(value: &str) -> bool {
+    if contains_dynamic_css_function(value) {
+        return false;
+    }
+
+    if let Ok(opacity) = value.parse::<f32>() {
+        return !(0.0..=1.0).contains(&opacity);
+    }
+
+    is_single_identifier(value)
+}
+
+fn is_single_identifier(value: &str) -> bool {
+    !value.is_empty()
+        && !value
+            .as_bytes()
+            .iter()
+            .any(|byte| byte.is_ascii_whitespace())
+        && value
+            .as_bytes()
+            .iter()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_'))
+}
+
+fn contains_dynamic_css_function(value: &str) -> bool {
+    let lower = value.to_ascii_lowercase();
+    ["var(", "env(", "calc(", "min(", "max(", "clamp(", "attr("]
+        .iter()
+        .any(|needle| lower.contains(needle))
+}
+
+fn normalize_value_for_checks(raw_value: &str) -> &str {
+    let trimmed = raw_value.trim();
+    if trimmed.len() >= IMPORTANT_SUFFIX.len()
+        && trimmed[trimmed.len() - IMPORTANT_SUFFIX.len()..].eq_ignore_ascii_case(IMPORTANT_SUFFIX)
+    {
+        return trimmed[..trimmed.len() - IMPORTANT_SUFFIX.len()].trim_end();
+    }
+
+    trimmed
+}
+
+fn is_css_wide_keyword(value: &str) -> bool {
+    CSS_WIDE_KEYWORDS
+        .iter()
+        .any(|keyword| value.eq_ignore_ascii_case(keyword))
+}
+
+fn at_rule_name_from_source(semantic: &CssSemanticModel, rule: &RuleNode) -> Option<String> {
+    let local_start = rule.span.start.checked_sub(semantic.span.start)?;
+    let local_end = rule.span.end.checked_sub(semantic.span.start)?;
+    let segment = semantic.source.get(local_start..local_end)?.trim_start();
+
+    let rest = segment.strip_prefix('@')?;
+    let end = rest
+        .find(|current: char| current.is_ascii_whitespace() || current == '{')
+        .unwrap_or(rest.len());
+    let name = rest.get(..end)?.trim();
+    if name.is_empty() {
+        return None;
+    }
+
+    Some(name.to_ascii_lowercase())
+}
+
 const LEGACY_PREFIXES: [&str; 4] = ["-webkit-", "-moz-", "-ms-", "-o-"];
+const IMPORTANT_SUFFIX: &str = "!important";
+const DEPRECATION_TARGET_PROFILE: &str = "v1-baseline";
+
+const CSS_WIDE_KEYWORDS: [&str; 5] = ["inherit", "initial", "unset", "revert", "revert-layer"];
+
+const DISPLAY_KEYWORDS: [&str; 22] = [
+    "none",
+    "block",
+    "inline",
+    "inline-block",
+    "contents",
+    "flow-root",
+    "flex",
+    "inline-flex",
+    "grid",
+    "inline-grid",
+    "table",
+    "inline-table",
+    "table-row",
+    "table-cell",
+    "table-column",
+    "table-column-group",
+    "table-row-group",
+    "table-header-group",
+    "table-footer-group",
+    "table-caption",
+    "list-item",
+    "run-in",
+];
+
+const POSITION_KEYWORDS: [&str; 5] = ["static", "relative", "absolute", "fixed", "sticky"];
+const VISIBILITY_KEYWORDS: [&str; 3] = ["visible", "hidden", "collapse"];
+const BOX_SIZING_KEYWORDS: [&str; 2] = ["content-box", "border-box"];
+const OVERFLOW_KEYWORDS: [&str; 6] = ["visible", "hidden", "clip", "scroll", "auto", "overlay"];
+const FLEX_DIRECTION_KEYWORDS: [&str; 4] = ["row", "row-reverse", "column", "column-reverse"];
+const FLEX_WRAP_KEYWORDS: [&str; 3] = ["nowrap", "wrap", "wrap-reverse"];
+
+const DEPRECATED_AT_RULES: [&str; 3] = ["viewport", "-ms-viewport", "-moz-document"];
+const DEPRECATED_PROPERTIES: [&str; 3] = ["clip", "zoom", "box-flex-group"];
+const DISPLAY_DEPRECATED_VALUES: [&str; 2] = ["box", "inline-box"];
 
 #[cfg(test)]
 mod tests {
@@ -1377,6 +1637,174 @@ mod tests {
             overqualified_selector_diagnostics[1].span,
             Span::new(54, 73)
         );
+    }
+
+    #[test]
+    fn no_invalid_values_reports_subset_keyword_and_numeric_issues() {
+        let semantic = CssSemanticModel {
+            file_id: FileId::new(10),
+            span: Span::new(0, 80),
+            scope: Scope::Global,
+            source: ".a { display: squish; opacity: 1.5; position: absolute; }".to_string(),
+            rules: vec![RuleNode {
+                id: RuleNodeId(0),
+                selector_ids: vec![],
+                declaration_ids: vec![DeclarationId(0), DeclarationId(1), DeclarationId(2)],
+                span: Span::new(0, 58),
+                is_at_rule: false,
+            }],
+            selectors: vec![],
+            declarations: vec![
+                DeclarationNode {
+                    id: DeclarationId(0),
+                    rule_id: RuleNodeId(0),
+                    property: "display".to_string(),
+                    property_known: true,
+                    value: "squish".to_string(),
+                    span: Span::new(5, 21),
+                },
+                DeclarationNode {
+                    id: DeclarationId(1),
+                    rule_id: RuleNodeId(0),
+                    property: "opacity".to_string(),
+                    property_known: true,
+                    value: "1.5".to_string(),
+                    span: Span::new(22, 36),
+                },
+                DeclarationNode {
+                    id: DeclarationId(2),
+                    rule_id: RuleNodeId(0),
+                    property: "position".to_string(),
+                    property_known: true,
+                    value: "absolute".to_string(),
+                    span: Span::new(37, 56),
+                },
+            ],
+            at_rules: vec![],
+            indexes: SemanticIndexes::default(),
+        };
+
+        let diagnostics = run_rules(&semantic);
+        let invalid_value_diagnostics = diagnostics
+            .into_iter()
+            .filter(|diagnostic| diagnostic.rule_id.as_str() == "no_invalid_values")
+            .collect::<Vec<_>>();
+
+        assert_eq!(invalid_value_diagnostics.len(), 2);
+        assert!(invalid_value_diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.message.contains("display")));
+        assert!(invalid_value_diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.message.contains("opacity")));
+    }
+
+    #[test]
+    fn no_invalid_values_skips_complex_values_to_avoid_noise() {
+        let semantic = CssSemanticModel {
+            file_id: FileId::new(11),
+            span: Span::new(0, 72),
+            scope: Scope::Global,
+            source: ".a { display: inline flex; opacity: var(--opacity); }".to_string(),
+            rules: vec![RuleNode {
+                id: RuleNodeId(0),
+                selector_ids: vec![],
+                declaration_ids: vec![DeclarationId(0), DeclarationId(1)],
+                span: Span::new(0, 52),
+                is_at_rule: false,
+            }],
+            selectors: vec![],
+            declarations: vec![
+                DeclarationNode {
+                    id: DeclarationId(0),
+                    rule_id: RuleNodeId(0),
+                    property: "display".to_string(),
+                    property_known: true,
+                    value: "inline flex".to_string(),
+                    span: Span::new(5, 25),
+                },
+                DeclarationNode {
+                    id: DeclarationId(1),
+                    rule_id: RuleNodeId(0),
+                    property: "opacity".to_string(),
+                    property_known: true,
+                    value: "var(--opacity)".to_string(),
+                    span: Span::new(26, 50),
+                },
+            ],
+            at_rules: vec![],
+            indexes: SemanticIndexes::default(),
+        };
+
+        let diagnostics = run_rules(&semantic);
+        assert!(diagnostics
+            .into_iter()
+            .all(|diagnostic| diagnostic.rule_id.as_str() != "no_invalid_values"));
+    }
+
+    #[test]
+    fn no_deprecated_features_reports_policy_matches() {
+        let semantic = CssSemanticModel {
+            file_id: FileId::new(12),
+            span: Span::new(0, 96),
+            scope: Scope::Global,
+            source: "@viewport { width: device-width; } .a { clip: rect(1px,2px,3px,4px); display: box; }"
+                .to_string(),
+            rules: vec![
+                RuleNode {
+                    id: RuleNodeId(0),
+                    selector_ids: vec![],
+                    declaration_ids: vec![],
+                    span: Span::new(0, 33),
+                    is_at_rule: true,
+                },
+                RuleNode {
+                    id: RuleNodeId(1),
+                    selector_ids: vec![],
+                    declaration_ids: vec![DeclarationId(0), DeclarationId(1)],
+                    span: Span::new(34, 90),
+                    is_at_rule: false,
+                },
+            ],
+            selectors: vec![],
+            declarations: vec![
+                DeclarationNode {
+                    id: DeclarationId(0),
+                    rule_id: RuleNodeId(1),
+                    property: "clip".to_string(),
+                    property_known: true,
+                    value: "rect(1px,2px,3px,4px)".to_string(),
+                    span: Span::new(40, 69),
+                },
+                DeclarationNode {
+                    id: DeclarationId(1),
+                    rule_id: RuleNodeId(1),
+                    property: "display".to_string(),
+                    property_known: true,
+                    value: "box".to_string(),
+                    span: Span::new(70, 83),
+                },
+            ],
+            at_rules: vec![],
+            indexes: SemanticIndexes::default(),
+        };
+
+        let diagnostics = run_rules(&semantic);
+        let deprecated_diagnostics = diagnostics
+            .into_iter()
+            .filter(|diagnostic| diagnostic.rule_id.as_str() == "no_deprecated_features")
+            .collect::<Vec<_>>();
+
+        assert_eq!(deprecated_diagnostics.len(), 3);
+        assert!(deprecated_diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.message.contains("@viewport")));
+        assert!(deprecated_diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.message.contains("clip")));
+        assert!(deprecated_diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.message.contains("display value 'box'")));
     }
 
     #[test]
