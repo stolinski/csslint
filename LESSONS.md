@@ -22,3 +22,4 @@
 - Treat config validation as a preflight step: unknown rule IDs should short-circuit before traversal, while severity overrides are applied at rule instantiation.
 - Deterministic merges are easier to maintain with a single shared sorter utility (file id/path, span, severity, rule id, message) used by both per-file and cross-file aggregation.
 - Panic containment should disable only the failing rule instance for the current file and emit an internal error diagnostic, while other rules continue dispatching.
+- For SFC-safe fixes, declaration rewrites should use `semantic.span.start` to convert global spans back to local style slices before rebuilding replacement text.

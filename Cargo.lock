@@ -221,6 +221,7 @@ version = "0.1.0"
 dependencies = [
  "csslint-core",
  "csslint-extractor",
+ "csslint-fix",
  "csslint-parser",
  "csslint-rules",
  "csslint-semantic",

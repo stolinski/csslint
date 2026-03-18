@@ -4,12 +4,12 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::panic::{self, AssertUnwindSafe};
 
 use csslint_config::Config;
-use csslint_core::{Diagnostic, FileId, RuleId, Severity, Span};
+use csslint_core::{Diagnostic, FileId, Fix, RuleId, Severity, Span};
 use csslint_semantic::{CssSemanticModel, DeclarationNode, RuleNode, SelectorNode};
 
-pub type SelectorCallback = fn(&SelectorNode, &mut RuleRuntimeCtx);
-pub type DeclarationCallback = fn(&DeclarationNode, &mut RuleRuntimeCtx);
-pub type RuleNodeCallback = fn(&RuleNode, &mut RuleRuntimeCtx);
+pub type SelectorCallback = fn(&CssSemanticModel, &SelectorNode, &mut RuleRuntimeCtx);
+pub type DeclarationCallback = fn(&CssSemanticModel, &DeclarationNode, &mut RuleRuntimeCtx);
+pub type RuleNodeCallback = fn(&CssSemanticModel, &RuleNode, &mut RuleRuntimeCtx);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RuleMeta {
@@ -199,6 +199,23 @@ impl RuleRuntimeCtx {
         ));
     }
 
+    pub fn report_with_fix(&mut self, message: impl Into<String>, span: Span, fix: Fix) {
+        if self.severity == Severity::Off {
+            return;
+        }
+
+        self.diagnostics.push(
+            Diagnostic::new(
+                self.rule_id.clone(),
+                self.severity,
+                message,
+                span,
+                self.file_id,
+            )
+            .with_fix(fix),
+        );
+    }
+
     pub fn into_diagnostics(self) -> Vec<Diagnostic> {
         self.diagnostics
     }
@@ -255,6 +272,8 @@ impl RuleRegistry {
 pub fn core_registry() -> RuleRegistry {
     let mut registry = RuleRegistry::new();
     let _ = registry.register(NoEmptyRules);
+    let _ = registry.register(NoDuplicateDeclarations);
+    let _ = registry.register(NoLegacyVendorPrefixes);
 
     for meta in placeholder_rule_metas() {
         let _ = registry.register(PlaceholderRule { meta });
@@ -357,7 +376,7 @@ fn run_with_registry(
             }
 
             let result = panic::catch_unwind(AssertUnwindSafe(|| {
-                (subscriber.callback)(node, &mut active_rule.runtime)
+                (subscriber.callback)(semantic, node, &mut active_rule.runtime)
             }));
             if result.is_err() {
                 active_rule.failed = true;
@@ -377,7 +396,7 @@ fn run_with_registry(
             }
 
             let result = panic::catch_unwind(AssertUnwindSafe(|| {
-                (subscriber.callback)(node, &mut active_rule.runtime)
+                (subscriber.callback)(semantic, node, &mut active_rule.runtime)
             }));
             if result.is_err() {
                 active_rule.failed = true;
@@ -397,7 +416,7 @@ fn run_with_registry(
             }
 
             let result = panic::catch_unwind(AssertUnwindSafe(|| {
-                (subscriber.callback)(node, &mut active_rule.runtime)
+                (subscriber.callback)(semantic, node, &mut active_rule.runtime)
             }));
             if result.is_err() {
                 active_rule.failed = true;
@@ -480,6 +499,8 @@ struct DeclarationSubscriber {
 }
 
 struct NoEmptyRules;
+struct NoDuplicateDeclarations;
+struct NoLegacyVendorPrefixes;
 
 struct PlaceholderRule {
     meta: RuleMeta,
@@ -500,6 +521,44 @@ impl Rule for NoEmptyRules {
             on_selector: None,
             on_declaration: None,
             on_rule: Some(no_empty_rules_on_rule),
+        }
+    }
+}
+
+impl Rule for NoDuplicateDeclarations {
+    fn meta(&self) -> RuleMeta {
+        RuleMeta {
+            id: RuleId::from("no_duplicate_declarations"),
+            description: "Disallow duplicate declarations in a rule block",
+            default_severity: Severity::Error,
+            fixable: true,
+        }
+    }
+
+    fn create(&self, _ctx: RuleContext<'_>) -> RuleVisitor {
+        RuleVisitor {
+            on_selector: None,
+            on_declaration: None,
+            on_rule: Some(no_duplicate_declarations_on_rule),
+        }
+    }
+}
+
+impl Rule for NoLegacyVendorPrefixes {
+    fn meta(&self) -> RuleMeta {
+        RuleMeta {
+            id: RuleId::from("no_legacy_vendor_prefixes"),
+            description: "Disallow legacy vendor-prefixed properties/values",
+            default_severity: Severity::Warn,
+            fixable: true,
+        }
+    }
+
+    fn create(&self, _ctx: RuleContext<'_>) -> RuleVisitor {
+        RuleVisitor {
+            on_selector: None,
+            on_declaration: Some(no_legacy_vendor_prefixes_on_declaration),
+            on_rule: None,
         }
     }
 }
@@ -535,18 +594,6 @@ fn placeholder_rule_metas() -> Vec<RuleMeta> {
             fixable: false,
         },
         RuleMeta {
-            id: RuleId::from("no_duplicate_declarations"),
-            description: "Disallow duplicate declarations in a rule block",
-            default_severity: Severity::Error,
-            fixable: true,
-        },
-        RuleMeta {
-            id: RuleId::from("no_legacy_vendor_prefixes"),
-            description: "Disallow legacy vendor-prefixed properties/values",
-            default_severity: Severity::Warn,
-            fixable: true,
-        },
-        RuleMeta {
             id: RuleId::from("no_overqualified_selectors"),
             description: "Disallow overqualified selectors",
             default_severity: Severity::Warn,
@@ -573,13 +620,159 @@ fn placeholder_rule_metas() -> Vec<RuleMeta> {
     ]
 }
 
-fn no_empty_rules_on_rule(rule: &RuleNode, ctx: &mut RuleRuntimeCtx) {
+fn no_empty_rules_on_rule(_semantic: &CssSemanticModel, rule: &RuleNode, ctx: &mut RuleRuntimeCtx) {
     if rule.is_at_rule || !rule.declaration_ids.is_empty() {
         return;
     }
 
-    ctx.report("Empty rule block detected", rule.span);
+    if rule.span.is_empty() {
+        ctx.report("Empty rule block detected", rule.span);
+        return;
+    }
+
+    ctx.report_with_fix(
+        "Empty rule block detected",
+        rule.span,
+        Fix {
+            span: rule.span,
+            replacement: String::new(),
+            rule_id: RuleId::from("no_empty_rules"),
+            priority: 100,
+        },
+    );
 }
+
+fn no_duplicate_declarations_on_rule(
+    semantic: &CssSemanticModel,
+    rule: &RuleNode,
+    ctx: &mut RuleRuntimeCtx,
+) {
+    let mut seen = BTreeSet::new();
+
+    for declaration_id in &rule.declaration_ids {
+        let Some(declaration) = semantic.declarations.get(declaration_id.0 as usize) else {
+            continue;
+        };
+
+        let property = declaration.property.to_ascii_lowercase();
+        let key = (property, declaration.value.clone());
+        if seen.insert(key) {
+            continue;
+        }
+
+        ctx.report_with_fix(
+            format!(
+                "Duplicate declaration '{}: {}' detected",
+                declaration.property, declaration.value
+            ),
+            declaration.span,
+            Fix {
+                span: declaration.span,
+                replacement: String::new(),
+                rule_id: RuleId::from("no_duplicate_declarations"),
+                priority: 200,
+            },
+        );
+    }
+}
+
+fn no_legacy_vendor_prefixes_on_declaration(
+    semantic: &CssSemanticModel,
+    declaration: &DeclarationNode,
+    ctx: &mut RuleRuntimeCtx,
+) {
+    if let Some((prefix, unprefixed_property)) = strip_legacy_prefix(&declaration.property) {
+        let message = format!(
+            "Legacy vendor-prefixed property '{}' detected; use '{}'",
+            declaration.property, unprefixed_property
+        );
+
+        if let Some(fix) = declaration_replacement_fix(
+            semantic,
+            declaration,
+            &declaration.property,
+            unprefixed_property,
+            "no_legacy_vendor_prefixes",
+            300,
+        ) {
+            ctx.report_with_fix(message, declaration.span, fix);
+        } else {
+            let _ = prefix;
+            ctx.report(message, declaration.span);
+        }
+    }
+
+    if let Some((prefixed_value, unprefixed_value)) = prefixed_value_variant(&declaration.value) {
+        let message = format!(
+            "Legacy vendor-prefixed value '{}' detected; use '{}'",
+            prefixed_value, unprefixed_value
+        );
+
+        if let Some(fix) = declaration_replacement_fix(
+            semantic,
+            declaration,
+            prefixed_value,
+            &unprefixed_value,
+            "no_legacy_vendor_prefixes",
+            301,
+        ) {
+            ctx.report_with_fix(message, declaration.span, fix);
+        } else {
+            ctx.report(message, declaration.span);
+        }
+    }
+}
+
+fn declaration_replacement_fix(
+    semantic: &CssSemanticModel,
+    declaration: &DeclarationNode,
+    needle: &str,
+    replacement: &str,
+    rule_id: &'static str,
+    priority: u16,
+) -> Option<Fix> {
+    let local_start = declaration.span.start.checked_sub(semantic.span.start)?;
+    let local_end = declaration.span.end.checked_sub(semantic.span.start)?;
+    let segment = semantic.source.get(local_start..local_end)?;
+    let replace_at = segment.find(needle)?;
+
+    let mut rewritten = String::with_capacity(segment.len() - needle.len() + replacement.len());
+    rewritten.push_str(&segment[..replace_at]);
+    rewritten.push_str(replacement);
+    rewritten.push_str(&segment[replace_at + needle.len()..]);
+
+    Some(Fix {
+        span: declaration.span,
+        replacement: rewritten,
+        rule_id: RuleId::from(rule_id),
+        priority,
+    })
+}
+
+fn strip_legacy_prefix(input: &str) -> Option<(&'static str, &str)> {
+    LEGACY_PREFIXES.iter().find_map(|prefix| {
+        input
+            .strip_prefix(prefix)
+            .filter(|suffix| !suffix.is_empty())
+            .map(|suffix| (*prefix, suffix))
+    })
+}
+
+fn prefixed_value_variant(value: &str) -> Option<(&str, String)> {
+    let trimmed = value.trim();
+    for prefix in LEGACY_PREFIXES {
+        if let Some(suffix) = trimmed.strip_prefix(prefix) {
+            if suffix.is_empty() {
+                continue;
+            }
+            return Some((trimmed, suffix.to_string()));
+        }
+    }
+
+    None
+}
+
+const LEGACY_PREFIXES: [&str; 4] = ["-webkit-", "-moz-", "-ms-", "-o-"];
 
 #[cfg(test)]
 mod tests {
@@ -976,7 +1169,7 @@ mod tests {
         }
     }
 
-    fn panic_on_rule(_node: &RuleNode, _ctx: &mut RuleRuntimeCtx) {
+    fn panic_on_rule(_semantic: &CssSemanticModel, _node: &RuleNode, _ctx: &mut RuleRuntimeCtx) {
         panic!("simulated rule panic");
     }
 
@@ -1001,7 +1194,7 @@ mod tests {
         }
     }
 
-    fn safe_on_rule(node: &RuleNode, ctx: &mut RuleRuntimeCtx) {
+    fn safe_on_rule(_semantic: &CssSemanticModel, node: &RuleNode, ctx: &mut RuleRuntimeCtx) {
         ctx.report("safe rule still ran", node.span);
     }
 
@@ -1079,15 +1272,23 @@ mod tests {
         }
     }
 
-    fn report_rule(node: &RuleNode, ctx: &mut RuleRuntimeCtx) {
+    fn report_rule(_semantic: &CssSemanticModel, node: &RuleNode, ctx: &mut RuleRuntimeCtx) {
         ctx.report("rule", node.span);
     }
 
-    fn report_selector(node: &SelectorNode, ctx: &mut RuleRuntimeCtx) {
+    fn report_selector(
+        _semantic: &CssSemanticModel,
+        node: &SelectorNode,
+        ctx: &mut RuleRuntimeCtx,
+    ) {
         ctx.report("selector", node.span);
     }
 
-    fn report_declaration(node: &DeclarationNode, ctx: &mut RuleRuntimeCtx) {
+    fn report_declaration(
+        _semantic: &CssSemanticModel,
+        node: &DeclarationNode,
+        ctx: &mut RuleRuntimeCtx,
+    ) {
         ctx.report("declaration", node.span);
     }
 
