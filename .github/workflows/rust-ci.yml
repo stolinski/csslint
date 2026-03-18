@@ -125,6 +125,21 @@ jobs:
       - name: Run malformed reliability suite
         run: cargo test -p csslint-test-harness --test extractor_malformed --test malformed_reliability
 
+  determinism:
+    runs-on: ubuntu-latest
+    needs: [check]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.82.0
+
+      - name: Run determinism suite
+        run: cargo test -p csslint-test-harness --test determinism_parallel
+
   framework:
     runs-on: ubuntu-latest
     needs: [check]
