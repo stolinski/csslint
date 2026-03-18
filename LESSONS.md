@@ -32,3 +32,4 @@
 - Keep rule specs explicit about conservative parser limits (for example duplicate selector context partitioning and string-segment overqualification checks) so docs do not imply full grammar coverage.
 - Fix collection should stage proposals by `FileId` and validate span integrity (`start <= end`, in-bounds) up front so malformed fix hints are rejected without risking applier panics.
 - Overlap resolution stays repeatable when candidates are ranked globally by severity, then priority, then span length, then rule ID before conflict checks.
+- Descending byte-range application works best when paired with UTF-8 boundary checks; this keeps offset math stable and preserves untouched CRLF/newline bytes exactly.

@@ -216,21 +216,60 @@ pub fn apply_fixes(source: &str, fixes: &[Fix]) -> (String, usize) {
         return (source.to_string(), 0);
     }
 
-    let mut updated = source.to_string();
-    let mut applied = 0;
+    let staged = fixes
+        .iter()
+        .map(|fix| StagedFix {
+            file_id: FileId::new(0),
+            span: fix.span,
+            replacement: fix.replacement.clone(),
+            rule_id: fix.rule_id.clone(),
+            severity: Severity::Warn,
+            priority: fix.priority,
+        })
+        .collect::<Vec<_>>();
+
+    let (accepted, _dropped) = resolve_file_overlaps(&staged);
+    apply_resolved_fixes(source, &accepted)
+}
+
+pub fn apply_resolved_fixes(source: &str, fixes: &[StagedFix]) -> (String, usize) {
+    if fixes.is_empty() {
+        return (source.to_string(), 0);
+    }
+
+    let source_len = source.len();
+    let mut updated = source.as_bytes().to_vec();
+    let mut applied = 0usize;
     let mut ordered = fixes.to_vec();
-    ordered.sort_by(|left, right| right.span.start.cmp(&left.span.start));
+    ordered.sort_by(|left, right| {
+        right
+            .span
+            .start
+            .cmp(&left.span.start)
+            .then_with(|| right.span.end.cmp(&left.span.end))
+            .then_with(|| left.rule_id.cmp(&right.rule_id))
+    });
 
     for fix in ordered {
-        if fix.span.start > fix.span.end || fix.span.end > updated.len() {
+        if fix.span.start > fix.span.end || fix.span.end > source_len {
             continue;
         }
 
-        updated.replace_range(fix.span.start..fix.span.end, &fix.replacement);
+        if !source.is_char_boundary(fix.span.start) || !source.is_char_boundary(fix.span.end) {
+            continue;
+        }
+
+        updated.splice(
+            fix.span.start..fix.span.end,
+            fix.replacement.as_bytes().iter().copied(),
+        );
         applied += 1;
     }
 
-    (updated, applied)
+    match String::from_utf8(updated) {
+        Ok(value) => (value, applied),
+        Err(_) => (source.to_string(), 0),
+    }
 }
 
 #[cfg(test)]
@@ -240,8 +279,8 @@ mod tests {
     use csslint_core::{Diagnostic, FileId, Fix, RuleId, Severity, Span};
 
     use super::{
-        collect_fix_proposals, resolve_file_overlaps, resolve_overlaps, RejectedFixReason,
-        StagedFix,
+        apply_fixes, apply_resolved_fixes, collect_fix_proposals, resolve_file_overlaps,
+        resolve_overlaps, RejectedFixReason, StagedFix,
     };
 
     #[test]
@@ -434,6 +473,92 @@ mod tests {
 
         assert_eq!(first.accepted_by_file, second.accepted_by_file);
         assert_eq!(first.dropped.len(), second.dropped.len());
+    }
+
+    #[test]
+    fn descending_applier_handles_mixed_non_overlapping_ranges() {
+        let source = "alpha beta gamma";
+        let fixes = vec![
+            staged_fix(
+                FileId::new(1),
+                Span::new(6, 10),
+                "swap_beta",
+                Severity::Warn,
+                1,
+            ),
+            staged_fix(
+                FileId::new(1),
+                Span::new(11, 16),
+                "trim_gamma",
+                Severity::Warn,
+                1,
+            ),
+        ];
+
+        let mut accepted = fixes;
+        accepted[0].replacement = "BETA".to_string();
+        accepted[1].replacement = "g".to_string();
+
+        let (updated, applied) = apply_resolved_fixes(source, &accepted);
+        assert_eq!(updated, "alpha BETA g");
+        assert_eq!(applied, 2);
+    }
+
+    #[test]
+    fn descending_applier_preserves_unedited_crlf_segments() {
+        let source = "a\r\nb\r\nc\r\n";
+        let mut fix = staged_fix(
+            FileId::new(1),
+            Span::new(3, 4),
+            "replace_b",
+            Severity::Warn,
+            1,
+        );
+        fix.replacement = "bee".to_string();
+
+        let (updated, applied) = apply_resolved_fixes(source, &[fix]);
+        assert_eq!(updated, "a\r\nbee\r\nc\r\n");
+        assert_eq!(applied, 1);
+    }
+
+    #[test]
+    fn descending_applier_skips_non_char_boundary_spans() {
+        let source = "aéz";
+        let mut invalid_fix = staged_fix(
+            FileId::new(1),
+            Span::new(2, 3),
+            "invalid_boundary",
+            Severity::Warn,
+            1,
+        );
+        invalid_fix.replacement = "x".to_string();
+
+        let (updated, applied) = apply_resolved_fixes(source, &[invalid_fix]);
+        assert_eq!(updated, source);
+        assert_eq!(applied, 0);
+    }
+
+    #[test]
+    fn legacy_apply_fixes_path_resolves_overlaps_before_applying() {
+        let source = "abcdef";
+        let fixes = vec![
+            Fix {
+                span: Span::new(1, 4),
+                replacement: "X".to_string(),
+                rule_id: RuleId::from("low_priority"),
+                priority: 1,
+            },
+            Fix {
+                span: Span::new(2, 3),
+                replacement: "Y".to_string(),
+                rule_id: RuleId::from("high_priority"),
+                priority: 100,
+            },
+        ];
+
+        let (updated, applied) = apply_fixes(source, &fixes);
+        assert_eq!(updated, "abYdef");
+        assert_eq!(applied, 1);
     }
 
     fn diagnostic_with_fix(
