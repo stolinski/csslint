@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "tool": "csslint",
+  "summary": {
+    "filesScanned": 1,
+    "filesLinted": 1,
+    "errors": 1,
+    "warnings": 0,
+    "fixesApplied": 0,
+    "durationMs": 0,
+    "exitCode": 1
+  },
+  "diagnostics": [
+    {
+      "filePath": "main.css",
+      "ruleId": "no_unknown_properties",
+      "severity": "error",
+      "message": "Unknown property 'colr' detected",
+      "span": {
+        "startOffset": 6,
+        "endOffset": 17,
+        "startLine": 1,
+        "startColumn": 7,
+        "endLine": 1,
+        "endColumn": 18
+      },
+      "fix": {
+        "available": false
+      }
+    }
+  ],
+  "internalErrors": [],
+  "timing": {
+    "parseMs": 0,
+    "semanticMs": 0,
+    "rulesMs": 0,
+    "fixMs": 0
+  }
+}

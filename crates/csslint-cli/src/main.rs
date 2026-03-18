@@ -24,7 +24,11 @@ fn main() {
                 result.exit_code()
             }
             Err(error) => {
-                eprintln!("{error}");
+                if options.format == OutputFormat::Json {
+                    print_json_error(&error);
+                } else {
+                    eprintln!("{error}");
+                }
                 2
             }
         },
@@ -499,6 +503,44 @@ fn print_json(result: &LintResult) {
     match render_json(result) {
         Ok(json) => println!("{json}"),
         Err(error) => eprintln!("csslint runtime_error: failed to serialize json output: {error}"),
+    }
+}
+
+fn print_json_error(error: &CliError) {
+    let payload = JsonResult {
+        schema_version: 1,
+        tool: "csslint",
+        summary: JsonSummary {
+            files_scanned: 0,
+            files_linted: 0,
+            errors: 0,
+            warnings: 0,
+            fixes_applied: 0,
+            duration_ms: 0,
+            exit_code: 2,
+        },
+        diagnostics: Vec::new(),
+        internal_errors: vec![JsonInternalError {
+            kind: match error.kind {
+                CliErrorKind::Config => "config_error".to_string(),
+                CliErrorKind::Runtime | CliErrorKind::Usage => "runtime_error".to_string(),
+            },
+            message: error.message.clone(),
+            file_path: None,
+        }],
+        timing: JsonTiming {
+            parse_ms: 0,
+            semantic_ms: 0,
+            rules_ms: 0,
+            fix_ms: 0,
+        },
+    };
+
+    match serde_json::to_string_pretty(&payload) {
+        Ok(json) => println!("{json}"),
+        Err(serialize_error) => {
+            eprintln!("csslint runtime_error: failed to serialize json output: {serialize_error}")
+        }
     }
 }
 
