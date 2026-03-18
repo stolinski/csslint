@@ -4,7 +4,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::panic::{self, AssertUnwindSafe};
 
 use csslint_config::Config;
-use csslint_core::{Diagnostic, FileId, Fix, RuleId, Severity, Span};
+use csslint_core::{Diagnostic, FileId, Fix, RuleId, Scope, Severity, Span};
 use csslint_semantic::{CssSemanticModel, DeclarationNode, RuleNode, SelectorNode};
 
 pub type SelectorCallback = fn(&CssSemanticModel, &SelectorNode, &mut RuleRuntimeCtx);
@@ -279,6 +279,8 @@ pub fn core_registry() -> RuleRegistry {
     let _ = registry.register(NoOverqualifiedSelectors);
     let _ = registry.register(NoInvalidValues);
     let _ = registry.register(NoDeprecatedFeatures);
+    let _ = registry.register(PreferLogicalProperties);
+    let _ = registry.register(NoGlobalLeaks);
 
     for meta in placeholder_rule_metas() {
         let _ = registry.register(PlaceholderRule { meta });
@@ -511,6 +513,8 @@ struct NoUnknownProperties;
 struct NoOverqualifiedSelectors;
 struct NoInvalidValues;
 struct NoDeprecatedFeatures;
+struct PreferLogicalProperties;
+struct NoGlobalLeaks;
 
 struct PlaceholderRule {
     meta: RuleMeta,
@@ -668,6 +672,44 @@ impl Rule for NoDeprecatedFeatures {
     }
 }
 
+impl Rule for PreferLogicalProperties {
+    fn meta(&self) -> RuleMeta {
+        RuleMeta {
+            id: RuleId::from("prefer_logical_properties"),
+            description: "Prefer logical over physical directional properties",
+            default_severity: Severity::Warn,
+            fixable: true,
+        }
+    }
+
+    fn create(&self, _ctx: RuleContext<'_>) -> RuleVisitor {
+        RuleVisitor {
+            on_selector: None,
+            on_declaration: Some(prefer_logical_properties_on_declaration),
+            on_rule: None,
+        }
+    }
+}
+
+impl Rule for NoGlobalLeaks {
+    fn meta(&self) -> RuleMeta {
+        RuleMeta {
+            id: RuleId::from("no_global_leaks"),
+            description: "Disallow high-confidence global leaks in scoped style blocks",
+            default_severity: Severity::Error,
+            fixable: false,
+        }
+    }
+
+    fn create(&self, _ctx: RuleContext<'_>) -> RuleVisitor {
+        RuleVisitor {
+            on_selector: Some(no_global_leaks_on_selector),
+            on_declaration: None,
+            on_rule: None,
+        }
+    }
+}
+
 impl Rule for PlaceholderRule {
     fn meta(&self) -> RuleMeta {
         self.meta.clone()
@@ -679,20 +721,7 @@ impl Rule for PlaceholderRule {
 }
 
 fn placeholder_rule_metas() -> Vec<RuleMeta> {
-    vec![
-        RuleMeta {
-            id: RuleId::from("prefer_logical_properties"),
-            description: "Prefer logical over physical properties",
-            default_severity: Severity::Warn,
-            fixable: true,
-        },
-        RuleMeta {
-            id: RuleId::from("no_global_leaks"),
-            description: "Disallow accidental global selector leaks in scoped styles",
-            default_severity: Severity::Error,
-            fixable: false,
-        },
-    ]
+    vec![]
 }
 
 fn no_empty_rules_on_rule(_semantic: &CssSemanticModel, rule: &RuleNode, ctx: &mut RuleRuntimeCtx) {
@@ -915,6 +944,65 @@ fn no_deprecated_features_on_rule(
             rule.span,
         );
     }
+}
+
+fn prefer_logical_properties_on_declaration(
+    semantic: &CssSemanticModel,
+    declaration: &DeclarationNode,
+    ctx: &mut RuleRuntimeCtx,
+) {
+    let property = declaration.property.to_ascii_lowercase();
+    let Some(logical_property) = physical_to_logical_property(property.as_str()) else {
+        return;
+    };
+
+    let message = format!(
+        "Prefer logical property '{}' over physical '{}'",
+        logical_property, declaration.property
+    );
+
+    if let Some(fix) = declaration_replacement_fix(
+        semantic,
+        declaration,
+        &declaration.property,
+        logical_property,
+        "prefer_logical_properties",
+        350,
+    ) {
+        ctx.report_with_fix(message, declaration.span, fix);
+    } else {
+        ctx.report(message, declaration.span);
+    }
+}
+
+fn no_global_leaks_on_selector(
+    semantic: &CssSemanticModel,
+    selector: &SelectorNode,
+    ctx: &mut RuleRuntimeCtx,
+) {
+    if !is_scoped_style_context(semantic.scope) {
+        return;
+    }
+
+    if !selector.raw.contains(":global(") {
+        return;
+    }
+
+    if selector
+        .parts
+        .iter()
+        .any(|part| part.scope != Scope::Global)
+    {
+        return;
+    }
+
+    ctx.report(
+        format!(
+            "Selector '{}' leaks globally from a scoped style block",
+            selector.normalized
+        ),
+        selector.span,
+    );
 }
 
 fn no_legacy_vendor_prefixes_on_declaration(
@@ -1269,6 +1357,32 @@ fn at_rule_name_from_source(semantic: &CssSemanticModel, rule: &RuleNode) -> Opt
     }
 
     Some(name.to_ascii_lowercase())
+}
+
+fn physical_to_logical_property(property: &str) -> Option<&'static str> {
+    match property {
+        "margin-left" => Some("margin-inline-start"),
+        "margin-right" => Some("margin-inline-end"),
+        "padding-left" => Some("padding-inline-start"),
+        "padding-right" => Some("padding-inline-end"),
+        "border-left" => Some("border-inline-start"),
+        "border-right" => Some("border-inline-end"),
+        "border-left-color" => Some("border-inline-start-color"),
+        "border-right-color" => Some("border-inline-end-color"),
+        "border-left-style" => Some("border-inline-start-style"),
+        "border-right-style" => Some("border-inline-end-style"),
+        "border-left-width" => Some("border-inline-start-width"),
+        "border-right-width" => Some("border-inline-end-width"),
+        "left" => Some("inset-inline-start"),
+        "right" => Some("inset-inline-end"),
+        "top" => Some("inset-block-start"),
+        "bottom" => Some("inset-block-end"),
+        _ => None,
+    }
+}
+
+fn is_scoped_style_context(scope: Scope) -> bool {
+    !matches!(scope, Scope::Global)
 }
 
 const LEGACY_PREFIXES: [&str; 4] = ["-webkit-", "-moz-", "-ms-", "-o-"];
@@ -1805,6 +1919,159 @@ mod tests {
         assert!(deprecated_diagnostics
             .iter()
             .any(|diagnostic| diagnostic.message.contains("display value 'box'")));
+    }
+
+    #[test]
+    fn prefer_logical_properties_reports_and_offers_safe_fix() {
+        let semantic = CssSemanticModel {
+            file_id: FileId::new(13),
+            span: Span::new(0, 34),
+            scope: Scope::Global,
+            source: ".card { margin-left: 1rem; }".to_string(),
+            rules: vec![RuleNode {
+                id: RuleNodeId(0),
+                selector_ids: vec![],
+                declaration_ids: vec![DeclarationId(0)],
+                span: Span::new(0, 29),
+                is_at_rule: false,
+            }],
+            selectors: vec![],
+            declarations: vec![DeclarationNode {
+                id: DeclarationId(0),
+                rule_id: RuleNodeId(0),
+                property: "margin-left".to_string(),
+                property_known: true,
+                value: "1rem".to_string(),
+                span: Span::new(8, 26),
+            }],
+            at_rules: vec![],
+            indexes: SemanticIndexes::default(),
+        };
+
+        let diagnostics = run_rules(&semantic);
+        let logical_diagnostics = diagnostics
+            .into_iter()
+            .filter(|diagnostic| diagnostic.rule_id.as_str() == "prefer_logical_properties")
+            .collect::<Vec<_>>();
+
+        assert_eq!(logical_diagnostics.len(), 1);
+        assert!(logical_diagnostics[0]
+            .message
+            .contains("margin-inline-start"));
+        let fix = logical_diagnostics[0]
+            .fix
+            .as_ref()
+            .expect("logical property diagnostic should include a fix");
+        assert!(fix.replacement.contains("margin-inline-start"));
+    }
+
+    #[test]
+    fn no_global_leaks_flags_only_fully_global_escapes_in_scoped_contexts() {
+        let semantic = CssSemanticModel {
+            file_id: FileId::new(14),
+            span: Span::new(0, 66),
+            scope: Scope::VueScoped,
+            source: ":global(.theme) { color: red; } .card :global(.child) { color: red; }"
+                .to_string(),
+            rules: vec![
+                RuleNode {
+                    id: RuleNodeId(0),
+                    selector_ids: vec![SelectorId(0)],
+                    declaration_ids: vec![],
+                    span: Span::new(0, 31),
+                    is_at_rule: false,
+                },
+                RuleNode {
+                    id: RuleNodeId(1),
+                    selector_ids: vec![SelectorId(1)],
+                    declaration_ids: vec![],
+                    span: Span::new(32, 66),
+                    is_at_rule: false,
+                },
+            ],
+            selectors: vec![
+                SelectorNode {
+                    id: SelectorId(0),
+                    rule_id: RuleNodeId(0),
+                    raw: ":global(.theme)".to_string(),
+                    normalized: ":global(.theme)".to_string(),
+                    parts: vec![SelectorPart {
+                        value: ".theme".to_string(),
+                        kind: SelectorPartKind::Class,
+                        scope: Scope::Global,
+                    }],
+                    span: Span::new(0, 15),
+                },
+                SelectorNode {
+                    id: SelectorId(1),
+                    rule_id: RuleNodeId(1),
+                    raw: ".card :global(.child)".to_string(),
+                    normalized: ".card :global(.child)".to_string(),
+                    parts: vec![
+                        SelectorPart {
+                            value: ".card".to_string(),
+                            kind: SelectorPartKind::Class,
+                            scope: Scope::VueScoped,
+                        },
+                        SelectorPart {
+                            value: ".child".to_string(),
+                            kind: SelectorPartKind::Class,
+                            scope: Scope::Global,
+                        },
+                    ],
+                    span: Span::new(32, 53),
+                },
+            ],
+            declarations: vec![],
+            at_rules: vec![],
+            indexes: SemanticIndexes::default(),
+        };
+
+        let diagnostics = run_rules(&semantic);
+        let leak_diagnostics = diagnostics
+            .into_iter()
+            .filter(|diagnostic| diagnostic.rule_id.as_str() == "no_global_leaks")
+            .collect::<Vec<_>>();
+
+        assert_eq!(leak_diagnostics.len(), 1);
+        assert_eq!(leak_diagnostics[0].span, Span::new(0, 15));
+    }
+
+    #[test]
+    fn no_global_leaks_is_ignored_for_global_stylesheets() {
+        let semantic = CssSemanticModel {
+            file_id: FileId::new(15),
+            span: Span::new(0, 22),
+            scope: Scope::Global,
+            source: ":global(.theme) {}".to_string(),
+            rules: vec![RuleNode {
+                id: RuleNodeId(0),
+                selector_ids: vec![SelectorId(0)],
+                declaration_ids: vec![],
+                span: Span::new(0, 18),
+                is_at_rule: false,
+            }],
+            selectors: vec![SelectorNode {
+                id: SelectorId(0),
+                rule_id: RuleNodeId(0),
+                raw: ":global(.theme)".to_string(),
+                normalized: ":global(.theme)".to_string(),
+                parts: vec![SelectorPart {
+                    value: ".theme".to_string(),
+                    kind: SelectorPartKind::Class,
+                    scope: Scope::Global,
+                }],
+                span: Span::new(0, 15),
+            }],
+            declarations: vec![],
+            at_rules: vec![],
+            indexes: SemanticIndexes::default(),
+        };
+
+        let diagnostics = run_rules(&semantic);
+        assert!(diagnostics
+            .into_iter()
+            .all(|diagnostic| diagnostic.rule_id.as_str() != "no_global_leaks"));
     }
 
     #[test]

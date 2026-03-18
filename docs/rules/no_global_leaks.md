@@ -13,8 +13,8 @@ Prevent accidental global selector leakage from scoped component style blocks.
 1. Run only in scoped style contexts.
    - includes Vue `<style scoped>`, Vue `<style module>`, and Svelte `<style>` in v1
 2. Inspect selector scope annotations from semantic model.
-3. Allow explicit global escapes (`:global(...)`) when used intentionally.
-4. Report high-confidence accidental global patterns.
+3. Allow mixed selectors with scoped anchors plus explicit global escapes (`.local :global(.x)`).
+4. Report only high-confidence leak patterns: selectors that are entirely global escapes in scoped blocks (global parts only).
 
 ## Config Options and Defaults
 
@@ -36,6 +36,7 @@ Prevent accidental global selector leakage from scoped component style blocks.
 ## Known Divergences from Stylelint
 
 - Native framework-aware behavior; no direct Stylelint mapping.
+- v1 intentionally avoids ambiguous nested inference and only flags global-only escapes.
 
 ## Complexity and Performance Notes
 

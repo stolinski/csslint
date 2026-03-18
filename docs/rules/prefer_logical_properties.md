@@ -11,9 +11,17 @@ Encourage logical properties over physical directional properties for better wri
 ## Algorithm Summary
 
 1. Visit declarations.
-2. Detect physical directional properties (for example, `margin-left`, `padding-right`).
-3. Map to logical equivalents when available.
-4. Report with suggested logical replacement.
+2. Detect physical directional properties with one-to-one logical mappings.
+3. Map to logical equivalents and report with suggested replacement.
+4. Attach safe autofix that rewrites only the property name.
+
+Current v1 mapping set includes:
+
+- `margin-left/right` -> `margin-inline-start/end`
+- `padding-left/right` -> `padding-inline-start/end`
+- `border-left/right` and `border-left/right-{color|style|width}` -> inline start/end equivalents
+- `left/right` -> `inset-inline-start/end`
+- `top/bottom` -> `inset-block-start/end`
 
 ## Config Options and Defaults
 
