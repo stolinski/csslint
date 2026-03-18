@@ -19,7 +19,7 @@ fn main() {
     let exit_code = match parse_cli_options(env::args()) {
         Ok(options) => match run_lint(&options) {
             Ok(result) => {
-                print_result(&result, options.format);
+                print_result(&result, options.format, options.code_frame);
                 result.exit_code()
             }
             Err(error) => {
@@ -47,6 +47,7 @@ struct CliOptions {
     target_path: PathBuf,
     config_path: Option<PathBuf>,
     targets_override: Option<String>,
+    code_frame: bool,
     fix: bool,
     format: OutputFormat,
 }
@@ -113,6 +114,7 @@ struct LintResult {
     files_linted: usize,
     fixes_applied: usize,
     diagnostics: Vec<RenderedDiagnostic>,
+    file_sources: BTreeMap<String, String>,
 }
 
 impl LintResult {
@@ -183,6 +185,7 @@ where
     let mut target_path: Option<PathBuf> = None;
     let mut config_path: Option<PathBuf> = None;
     let mut targets_override: Option<String> = None;
+    let mut code_frame = false;
     let mut fix = false;
     let mut format = OutputFormat::Pretty;
 
@@ -190,6 +193,9 @@ where
         match arg.as_str() {
             "--fix" => {
                 fix = true;
+            }
+            "--code-frame" => {
+                code_frame = true;
             }
             "--config" => {
                 let Some(value) = args.next() else {
@@ -234,7 +240,7 @@ where
             }
             "-h" | "--help" => {
                 return Err(CliError::usage(
-                    "usage: csslint <path> [--config <path>] [--targets <profile>] [--fix] [--format json|pretty]",
+                    "usage: csslint <path> [--config <path>] [--targets <profile>] [--code-frame] [--fix] [--format json|pretty]",
                 ));
             }
             _ if arg.starts_with('-') => {
@@ -253,7 +259,7 @@ where
 
     let Some(target_path) = target_path else {
         return Err(CliError::usage(
-            "missing path argument; usage: csslint <path> [--config <path>] [--targets <profile>] [--fix] [--format json|pretty]",
+            "missing path argument; usage: csslint <path> [--config <path>] [--targets <profile>] [--code-frame] [--fix] [--format json|pretty]",
         ));
     };
 
@@ -261,6 +267,7 @@ where
         target_path,
         config_path,
         targets_override,
+        code_frame,
         fix,
         format,
     })
@@ -284,6 +291,7 @@ fn run_lint(options: &CliOptions) -> Result<LintResult, CliError> {
 
     let files_scanned = target_files.len();
     let mut file_indexes: BTreeMap<FileId, (PathBuf, LineIndex)> = BTreeMap::new();
+    let mut file_sources: BTreeMap<String, String> = BTreeMap::new();
     let mut diagnostics: Vec<Diagnostic> = Vec::new();
     let mut fixes_applied = 0usize;
 
@@ -292,6 +300,8 @@ fn run_lint(options: &CliOptions) -> Result<LintResult, CliError> {
         let source = fs::read_to_string(file_path).map_err(|error| {
             CliError::runtime(format!("failed to read '{}': {error}", file_path.display()))
         })?;
+        let display_path = file_path.to_string_lossy().to_string();
+        file_sources.insert(display_path, source.clone());
 
         file_indexes.insert(file_id, (file_path.clone(), LineIndex::new(&source)));
 
@@ -355,6 +365,7 @@ fn run_lint(options: &CliOptions) -> Result<LintResult, CliError> {
         files_linted: files_scanned,
         fixes_applied,
         diagnostics: rendered,
+        file_sources,
     })
 }
 
@@ -398,34 +409,16 @@ fn render_diagnostic(
     })
 }
 
-fn print_result(result: &LintResult, format: OutputFormat) {
+fn print_result(result: &LintResult, format: OutputFormat, code_frame: bool) {
     match format {
-        OutputFormat::Pretty => print_pretty(result),
+        OutputFormat::Pretty => print_pretty(result, code_frame),
         OutputFormat::Json => print_json(result),
     }
 }
 
-fn print_pretty(result: &LintResult) {
-    for diagnostic in &result.diagnostics {
-        println!(
-            "{}:{}:{} {} {} {}",
-            diagnostic.file_path,
-            diagnostic.span.start_line,
-            diagnostic.span.start_column,
-            diagnostic.severity,
-            diagnostic.rule_id,
-            diagnostic.message
-        );
-    }
-
-    println!(
-        "Scanned {} files, linted {}, errors: {}, warnings: {}, fixes applied: {}",
-        result.files_scanned,
-        result.files_linted,
-        result.error_count(),
-        result.warning_count(),
-        result.fixes_applied,
-    );
+fn print_pretty(result: &LintResult, code_frame: bool) {
+    let rendered = render_pretty(result, code_frame);
+    print!("{rendered}");
 }
 
 fn print_json(result: &LintResult) {
@@ -440,6 +433,92 @@ fn print_json(result: &LintResult) {
         Ok(json) => println!("{json}"),
         Err(error) => eprintln!("csslint runtime_error: failed to serialize json output: {error}"),
     }
+}
+
+fn render_pretty(result: &LintResult, code_frame: bool) -> String {
+    let mut output = String::new();
+    let mut current_file: Option<&str> = None;
+
+    for diagnostic in &result.diagnostics {
+        if current_file != Some(diagnostic.file_path.as_str()) {
+            if !output.is_empty() {
+                output.push('\n');
+            }
+            output.push_str(&diagnostic.file_path);
+            output.push('\n');
+            current_file = Some(diagnostic.file_path.as_str());
+        }
+
+        output.push_str(&format!(
+            "  {}:{}  {:<5}  {}  {}\n",
+            diagnostic.span.start_line,
+            diagnostic.span.start_column,
+            diagnostic.severity,
+            diagnostic.rule_id,
+            diagnostic.message
+        ));
+
+        if code_frame {
+            let frame = result
+                .file_sources
+                .get(&diagnostic.file_path)
+                .and_then(|source| render_code_frame(source, diagnostic));
+            if let Some(frame) = frame {
+                for line in frame.lines() {
+                    output.push_str("    ");
+                    output.push_str(line);
+                    output.push('\n');
+                }
+            }
+        }
+    }
+
+    if !result.diagnostics.is_empty() {
+        output.push('\n');
+    }
+
+    output.push_str(&format!(
+        "Summary: {} error(s), {} warning(s), {} file(s) scanned, {} file(s) linted, {} fix(es) applied\n",
+        result.error_count(),
+        result.warning_count(),
+        result.files_scanned,
+        result.files_linted,
+        result.fixes_applied
+    ));
+
+    output
+}
+
+fn render_code_frame(source: &str, diagnostic: &RenderedDiagnostic) -> Option<String> {
+    let line_number = diagnostic.span.start_line;
+    let line_text = source
+        .lines()
+        .nth(line_number.saturating_sub(1))?
+        .trim_end_matches('\r');
+    let gutter_width = line_number.to_string().len();
+    let marker_offset = diagnostic.span.start_column.saturating_sub(1);
+    let marker_length = if diagnostic.span.start_line == diagnostic.span.end_line {
+        diagnostic
+            .span
+            .end_column
+            .saturating_sub(diagnostic.span.start_column)
+            .max(1)
+    } else {
+        1
+    };
+
+    let marker_line = format!(
+        "{blank:>width$} | {offset}{marker}",
+        blank = "",
+        width = gutter_width,
+        offset = " ".repeat(marker_offset),
+        marker = "^".repeat(marker_length)
+    );
+
+    Some(format!(
+        "{line_number:>width$} | {line_text}\n{marker_line}",
+        width = gutter_width,
+    ))
 }
 
 fn discover_target_files(target: &Path) -> std::io::Result<Vec<PathBuf>> {
@@ -506,11 +585,15 @@ fn should_ignore_directory(name: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap;
     use std::fs;
     use std::path::{Path, PathBuf};
     use std::time::{SystemTime, UNIX_EPOCH};
 
-    use super::{discover_target_files, parse_cli_options, CliErrorKind, CliOptions, OutputFormat};
+    use super::{
+        discover_target_files, parse_cli_options, render_pretty, CliErrorKind, CliOptions,
+        LintResult, OutputFormat, RenderedDiagnostic, RenderedFix, RenderedSpan,
+    };
 
     #[test]
     fn parse_cli_options_accepts_v1_surface() {
@@ -529,6 +612,7 @@ mod tests {
                 target_path: PathBuf::from("src"),
                 config_path: None,
                 targets_override: None,
+                code_frame: false,
                 fix: true,
                 format: OutputFormat::Json,
             }
@@ -566,6 +650,7 @@ mod tests {
         .expect("explicit config path should parse");
 
         assert_eq!(parsed.config_path, Some(PathBuf::from("configs/lint.json")));
+        assert!(!parsed.code_frame);
     }
 
     #[test]
@@ -579,6 +664,18 @@ mod tests {
         .expect("targets override should parse");
 
         assert_eq!(parsed.targets_override.as_deref(), Some("defaults"));
+    }
+
+    #[test]
+    fn parse_cli_options_accepts_code_frame_flag() {
+        let parsed = parse_cli_options([
+            "csslint".to_string(),
+            "src".to_string(),
+            "--code-frame".to_string(),
+        ])
+        .expect("code frame flag should parse");
+
+        assert!(parsed.code_frame);
     }
 
     #[test]
@@ -647,6 +744,51 @@ mod tests {
             fixture.relative_paths(&first),
             fixture.relative_paths(&second)
         );
+    }
+
+    #[test]
+    fn pretty_reporter_is_deterministic_with_code_frames() {
+        let mut file_sources = BTreeMap::new();
+        file_sources.insert(
+            "src/main.css".to_string(),
+            ".alpha { color: red; }\n.beta { color: blue; }\n".to_string(),
+        );
+
+        let result = LintResult {
+            files_scanned: 1,
+            files_linted: 1,
+            fixes_applied: 0,
+            diagnostics: vec![RenderedDiagnostic {
+                file_path: "src/main.css".to_string(),
+                rule_id: "no_empty_rules".to_string(),
+                severity: "warn".to_string(),
+                message: "Example diagnostic".to_string(),
+                span: RenderedSpan {
+                    start_offset: 1,
+                    end_offset: 6,
+                    start_line: 1,
+                    start_column: 2,
+                    end_line: 1,
+                    end_column: 7,
+                },
+                fix: RenderedFix {
+                    available: false,
+                    start_offset: None,
+                    end_offset: None,
+                    replacement: None,
+                },
+            }],
+            file_sources,
+        };
+
+        let first = render_pretty(&result, true);
+        let second = render_pretty(&result, true);
+        let without_frame = render_pretty(&result, false);
+
+        assert_eq!(first, second);
+        assert!(first.contains("Summary:"));
+        assert!(first.contains("^"));
+        assert!(!without_frame.contains("^"));
     }
 
     struct TempFixture {
