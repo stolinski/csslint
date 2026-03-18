@@ -12,6 +12,11 @@ Reuse high-value Stylelint rule tests as a compatibility corpus for overlapping 
 4. Maintain explicit skip manifest for unsupported cases.
 5. Publish per-rule compatibility pass rates in CI.
 
+Repository implementation files:
+
+- `tests/compat/stylelint/source-pin.json`
+- `tests/compat/stylelint/suite-map.json`
+
 ## Initial Rule Suites to Import
 
 From Stylelint repository test files:

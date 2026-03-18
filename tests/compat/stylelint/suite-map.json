@@ -1,0 +1,84 @@
+{
+  "schemaVersion": 1,
+  "sourcePin": "tests/compat/stylelint/source-pin.json",
+  "suites": [
+    {
+      "stylelintRule": "block-no-empty",
+      "sourceFile": "lib/rules/block-no-empty/__tests__/index.mjs",
+      "csslintRule": "no_empty_rules",
+      "importMode": "full",
+      "supportedOptionSubsets": [
+        "config: [true]",
+        "fix: true"
+      ]
+    },
+    {
+      "stylelintRule": "no-duplicate-selectors",
+      "sourceFile": "lib/rules/no-duplicate-selectors/__tests__/index.mjs",
+      "csslintRule": "no_duplicate_selectors",
+      "importMode": "full",
+      "supportedOptionSubsets": [
+        "config: [true]"
+      ]
+    },
+    {
+      "stylelintRule": "property-no-unknown",
+      "sourceFile": "lib/rules/property-no-unknown/__tests__/index.mjs",
+      "csslintRule": "no_unknown_properties",
+      "importMode": "partial",
+      "supportedOptionSubsets": [
+        "config: [true]",
+        "custom properties are always ignored"
+      ]
+    },
+    {
+      "stylelintRule": "property-no-vendor-prefix",
+      "sourceFile": "lib/rules/property-no-vendor-prefix/__tests__/index.mjs",
+      "csslintRule": "no_legacy_vendor_prefixes",
+      "importMode": "partial",
+      "supportedOptionSubsets": [
+        "config: [true]"
+      ]
+    },
+    {
+      "stylelintRule": "value-no-vendor-prefix",
+      "sourceFile": "lib/rules/value-no-vendor-prefix/__tests__/index.mjs",
+      "csslintRule": "no_legacy_vendor_prefixes",
+      "importMode": "partial",
+      "supportedOptionSubsets": [
+        "config: [true]"
+      ]
+    },
+    {
+      "stylelintRule": "declaration-block-no-duplicate-properties",
+      "sourceFile": "lib/rules/declaration-block-no-duplicate-properties/__tests__/index.mjs",
+      "csslintRule": "no_duplicate_declarations",
+      "importMode": "partial",
+      "supportedOptionSubsets": [
+        "config: [true]",
+        "exact duplicate property+value checks only"
+      ]
+    },
+    {
+      "stylelintRule": "selector-no-qualifying-type",
+      "sourceFile": "lib/rules/selector-no-qualifying-type/__tests__/index.mjs",
+      "csslintRule": "no_overqualified_selectors",
+      "importMode": "partial",
+      "supportedOptionSubsets": [
+        "config: [true]",
+        "type+class and type+id matches only"
+      ]
+    },
+    {
+      "stylelintRule": "declaration-property-value-no-unknown",
+      "sourceFile": "lib/rules/declaration-property-value-no-unknown/__tests__/index.mjs",
+      "csslintRule": "no_invalid_values",
+      "importMode": "partial",
+      "supportedOptionSubsets": [
+        "single-token v1 value subset",
+        "keywords: display, position, visibility, box-sizing, overflow, flex-direction, flex-wrap",
+        "numeric range: opacity"
+      ]
+    }
+  ]
+}

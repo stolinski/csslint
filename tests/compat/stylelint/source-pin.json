@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "repository": "https://github.com/stylelint/stylelint.git",
+  "commit": "5bd2d21e8a6b47f529314284d162e6dcb37ef681",
+  "pinnedAt": "2026-03-18",
+  "note": "Pinned source for CSSLint v1 compatibility harness imports."
+}
