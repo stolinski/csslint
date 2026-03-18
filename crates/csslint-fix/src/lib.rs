@@ -1,5 +1,6 @@
 #![forbid(unsafe_code)]
 
+use std::cmp::Ordering;
 use std::collections::BTreeMap;
 
 use csslint_core::{Diagnostic, FileId, Fix, RuleId, Severity, Span};
@@ -33,6 +34,7 @@ pub enum RejectedFixReason {
     MissingFileLength,
     InvalidSpan,
     OutOfBounds,
+    OverlapsHigherPriorityFix,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -114,6 +116,90 @@ pub fn collect_fix_proposals_for_file(
     collect_fix_proposals(diagnostics, &file_lengths)
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct FixResolution {
+    pub accepted_by_file: BTreeMap<FileId, Vec<StagedFix>>,
+    pub dropped: Vec<RejectedFix>,
+}
+
+impl FixResolution {
+    pub fn accepted_count(&self) -> usize {
+        self.accepted_by_file
+            .values()
+            .map(std::vec::Vec::len)
+            .sum::<usize>()
+    }
+}
+
+pub fn resolve_overlaps(staged_by_file: &BTreeMap<FileId, Vec<StagedFix>>) -> FixResolution {
+    let mut resolution = FixResolution::default();
+
+    for (file_id, staged_fixes) in staged_by_file {
+        let (accepted, mut dropped) = resolve_file_overlaps(staged_fixes);
+        resolution.accepted_by_file.insert(*file_id, accepted);
+        resolution.dropped.append(&mut dropped);
+    }
+
+    resolution
+}
+
+pub fn resolve_file_overlaps(staged_fixes: &[StagedFix]) -> (Vec<StagedFix>, Vec<RejectedFix>) {
+    let mut candidates = staged_fixes.to_vec();
+    candidates.sort_by(compare_fix_precedence);
+
+    let mut accepted: Vec<StagedFix> = Vec::new();
+    let mut dropped = Vec::new();
+
+    for candidate in candidates {
+        if accepted
+            .iter()
+            .any(|winner| spans_overlap(candidate.span, winner.span))
+        {
+            dropped.push(rejected_fix(
+                &candidate,
+                RejectedFixReason::OverlapsHigherPriorityFix,
+            ));
+            continue;
+        }
+
+        accepted.push(candidate);
+    }
+
+    accepted.sort_by(compare_fix_position);
+    (accepted, dropped)
+}
+
+fn compare_fix_precedence(left: &StagedFix, right: &StagedFix) -> Ordering {
+    severity_rank(right.severity)
+        .cmp(&severity_rank(left.severity))
+        .then_with(|| right.priority.cmp(&left.priority))
+        .then_with(|| left.span.len().cmp(&right.span.len()))
+        .then_with(|| left.rule_id.cmp(&right.rule_id))
+        .then_with(|| left.span.start.cmp(&right.span.start))
+        .then_with(|| left.span.end.cmp(&right.span.end))
+        .then_with(|| left.replacement.cmp(&right.replacement))
+}
+
+fn compare_fix_position(left: &StagedFix, right: &StagedFix) -> Ordering {
+    left.span
+        .start
+        .cmp(&right.span.start)
+        .then_with(|| left.span.end.cmp(&right.span.end))
+        .then_with(|| left.rule_id.cmp(&right.rule_id))
+}
+
+fn severity_rank(severity: Severity) -> u8 {
+    match severity {
+        Severity::Error => 3,
+        Severity::Warn => 2,
+        Severity::Off => 1,
+    }
+}
+
+fn spans_overlap(left: Span, right: Span) -> bool {
+    left.start < right.end && right.start < left.end
+}
+
 fn rejected_fix(staged_fix: &StagedFix, reason: RejectedFixReason) -> RejectedFix {
     RejectedFix {
         file_id: staged_fix.file_id,
@@ -153,7 +239,10 @@ mod tests {
 
     use csslint_core::{Diagnostic, FileId, Fix, RuleId, Severity, Span};
 
-    use super::{collect_fix_proposals, RejectedFixReason};
+    use super::{
+        collect_fix_proposals, resolve_file_overlaps, resolve_overlaps, RejectedFixReason,
+        StagedFix,
+    };
 
     #[test]
     fn stages_valid_fix_proposals_per_file() {
@@ -212,6 +301,141 @@ mod tests {
         );
     }
 
+    #[test]
+    fn overlap_resolver_prefers_higher_severity() {
+        let staged = vec![
+            staged_fix(
+                FileId::new(1),
+                Span::new(1, 6),
+                "warn_rule",
+                Severity::Warn,
+                100,
+            ),
+            staged_fix(
+                FileId::new(1),
+                Span::new(1, 6),
+                "error_rule",
+                Severity::Error,
+                0,
+            ),
+        ];
+
+        let (accepted, dropped) = resolve_file_overlaps(&staged);
+
+        assert_eq!(accepted.len(), 1);
+        assert_eq!(accepted[0].rule_id.as_str(), "error_rule");
+        assert_eq!(dropped.len(), 1);
+    }
+
+    #[test]
+    fn overlap_resolver_prefers_higher_priority_for_equal_severity() {
+        let staged = vec![
+            staged_fix(
+                FileId::new(1),
+                Span::new(0, 4),
+                "low_priority",
+                Severity::Warn,
+                1,
+            ),
+            staged_fix(
+                FileId::new(1),
+                Span::new(0, 4),
+                "high_priority",
+                Severity::Warn,
+                900,
+            ),
+        ];
+
+        let (accepted, dropped) = resolve_file_overlaps(&staged);
+
+        assert_eq!(accepted.len(), 1);
+        assert_eq!(accepted[0].rule_id.as_str(), "high_priority");
+        assert_eq!(dropped.len(), 1);
+    }
+
+    #[test]
+    fn overlap_resolver_prefers_shorter_span_then_rule_id() {
+        let shorter = staged_fix(
+            FileId::new(1),
+            Span::new(4, 7),
+            "shorter_rule",
+            Severity::Warn,
+            50,
+        );
+        let longer = staged_fix(
+            FileId::new(1),
+            Span::new(2, 10),
+            "longer_rule",
+            Severity::Warn,
+            50,
+        );
+
+        let (accepted, dropped) = resolve_file_overlaps(&[longer, shorter.clone()]);
+        assert_eq!(accepted.len(), 1);
+        assert_eq!(accepted[0].rule_id.as_str(), "shorter_rule");
+        assert_eq!(dropped.len(), 1);
+
+        let alpha = staged_fix(
+            FileId::new(1),
+            Span::new(2, 6),
+            "alpha_rule",
+            Severity::Warn,
+            5,
+        );
+        let beta = staged_fix(
+            FileId::new(1),
+            Span::new(2, 6),
+            "beta_rule",
+            Severity::Warn,
+            5,
+        );
+        let (accepted_tie, dropped_tie) = resolve_file_overlaps(&[beta, alpha.clone()]);
+        assert_eq!(accepted_tie.len(), 1);
+        assert_eq!(accepted_tie[0].rule_id.as_str(), "alpha_rule");
+        assert_eq!(dropped_tie.len(), 1);
+    }
+
+    #[test]
+    fn overlap_resolver_is_input_order_independent() {
+        let fixes = vec![
+            staged_fix(
+                FileId::new(7),
+                Span::new(1, 5),
+                "z_rule",
+                Severity::Warn,
+                10,
+            ),
+            staged_fix(
+                FileId::new(7),
+                Span::new(1, 5),
+                "a_rule",
+                Severity::Warn,
+                10,
+            ),
+            staged_fix(
+                FileId::new(7),
+                Span::new(20, 25),
+                "later_rule",
+                Severity::Warn,
+                10,
+            ),
+        ];
+
+        let mut first_order = BTreeMap::new();
+        first_order.insert(FileId::new(7), fixes.clone());
+        let mut second_order = BTreeMap::new();
+        second_order.insert(
+            FileId::new(7),
+            vec![fixes[2].clone(), fixes[0].clone(), fixes[1].clone()],
+        );
+
+        let first = resolve_overlaps(&first_order);
+        let second = resolve_overlaps(&second_order);
+
+        assert_eq!(first.accepted_by_file, second.accepted_by_file);
+        assert_eq!(first.dropped.len(), second.dropped.len());
+    }
+
     fn diagnostic_with_fix(
         file_id: FileId,
         span: Span,
@@ -241,5 +465,22 @@ mod tests {
             span,
             file_id,
         )
+    }
+
+    fn staged_fix(
+        file_id: FileId,
+        span: Span,
+        rule_id: &'static str,
+        severity: Severity,
+        priority: u16,
+    ) -> StagedFix {
+        StagedFix {
+            file_id,
+            span,
+            replacement: format!("replacement_for_{rule_id}"),
+            rule_id: RuleId::from(rule_id),
+            severity,
+            priority,
+        }
     }
 }
