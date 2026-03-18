@@ -76,6 +76,15 @@ Each preset must be fully documented as a resolved rule map.
 
 No hidden cascading behavior beyond this order.
 
+### Effective Resolution Rules (v1)
+
+- Default preset is `recommended`.
+- Preset expansion produces an explicit per-rule map.
+- `rules` overrides apply after preset expansion.
+- Target profile default is `defaults`.
+- `--targets` (when present) overrides config `targets`.
+- Resolved target profile is passed to parser and rule execution contexts.
+
 ## Reporting Formats
 
 ### Pretty Output

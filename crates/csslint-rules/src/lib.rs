@@ -4,7 +4,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::panic::{self, AssertUnwindSafe};
 
 use csslint_config::Config;
-use csslint_core::{Diagnostic, FileId, Fix, RuleId, Scope, Severity, Span};
+use csslint_core::{Diagnostic, FileId, Fix, RuleId, Scope, Severity, Span, TargetProfile};
 use csslint_semantic::{CssSemanticModel, DeclarationNode, RuleNode, SelectorNode};
 
 pub type SelectorCallback = fn(&CssSemanticModel, &SelectorNode, &mut RuleRuntimeCtx);
@@ -45,6 +45,7 @@ impl RuleVisitor {
 pub struct RuleContext<'a> {
     pub semantic: &'a CssSemanticModel,
     pub severity: Severity,
+    pub target_profile: TargetProfile,
 }
 
 pub trait Rule: Send + Sync {
@@ -172,17 +173,28 @@ pub struct RuleRuntimeCtx {
     file_id: FileId,
     rule_id: RuleId,
     severity: Severity,
+    target_profile: TargetProfile,
     diagnostics: Vec<Diagnostic>,
 }
 
 impl RuleRuntimeCtx {
-    pub fn new(file_id: FileId, rule_id: RuleId, severity: Severity) -> Self {
+    pub fn new(
+        file_id: FileId,
+        rule_id: RuleId,
+        severity: Severity,
+        target_profile: TargetProfile,
+    ) -> Self {
         Self {
             file_id,
             rule_id,
             severity,
+            target_profile,
             diagnostics: Vec::new(),
         }
+    }
+
+    pub const fn target_profile(&self) -> TargetProfile {
+        self.target_profile
     }
 
     pub fn report(&mut self, message: impl Into<String>, span: Span) {
@@ -290,21 +302,31 @@ pub fn core_registry() -> RuleRegistry {
 }
 
 pub fn run_rules(semantic: &CssSemanticModel) -> Vec<Diagnostic> {
-    run_rules_with_config(semantic, &Config::default()).unwrap_or_default()
+    run_rules_with_config_and_targets(semantic, &Config::default(), TargetProfile::Defaults)
+        .unwrap_or_default()
 }
 
 pub fn run_rules_with_config(
     semantic: &CssSemanticModel,
     config: &Config,
 ) -> Result<Vec<Diagnostic>, Vec<ConfigDiagnostic>> {
+    run_rules_with_config_and_targets(semantic, config, TargetProfile::Defaults)
+}
+
+pub fn run_rules_with_config_and_targets(
+    semantic: &CssSemanticModel,
+    config: &Config,
+    target_profile: TargetProfile,
+) -> Result<Vec<Diagnostic>, Vec<ConfigDiagnostic>> {
     let registry = core_registry();
-    run_with_registry(semantic, &registry, config)
+    run_with_registry(semantic, &registry, config, target_profile)
 }
 
 fn run_with_registry(
     semantic: &CssSemanticModel,
     registry: &RuleRegistry,
     config: &Config,
+    target_profile: TargetProfile,
 ) -> Result<Vec<Diagnostic>, Vec<ConfigDiagnostic>> {
     let known_rule_ids = registry
         .ordered_meta()
@@ -340,12 +362,16 @@ fn run_with_registry(
             continue;
         }
 
-        let visitor = rule.create(RuleContext { semantic, severity });
+        let visitor = rule.create(RuleContext {
+            semantic,
+            severity,
+            target_profile,
+        });
         active_rules.push(ActiveRule {
             on_selector: visitor.on_selector,
             on_declaration: visitor.on_declaration,
             on_rule: visitor.on_rule,
-            runtime: RuleRuntimeCtx::new(semantic.file_id, meta.id, severity),
+            runtime: RuleRuntimeCtx::new(semantic.file_id, meta.id, severity, target_profile),
             failed: false,
         });
     }
@@ -896,7 +922,8 @@ fn no_deprecated_features_on_declaration(
         ctx.report(
             format!(
                 "Deprecated feature '{}' is disallowed for {} targets",
-                declaration.property, DEPRECATION_TARGET_PROFILE
+                declaration.property,
+                ctx.target_profile().as_str()
             ),
             declaration.span,
         );
@@ -915,7 +942,8 @@ fn no_deprecated_features_on_declaration(
         ctx.report(
             format!(
                 "Deprecated display value '{}' is disallowed for {} targets",
-                normalized_value, DEPRECATION_TARGET_PROFILE
+                normalized_value,
+                ctx.target_profile().as_str()
             ),
             declaration.span,
         );
@@ -939,7 +967,8 @@ fn no_deprecated_features_on_rule(
         ctx.report(
             format!(
                 "Deprecated at-rule '@{}' is disallowed for {} targets",
-                name, DEPRECATION_TARGET_PROFILE
+                name,
+                ctx.target_profile().as_str()
             ),
             rule.span,
         );
@@ -1387,7 +1416,6 @@ fn is_scoped_style_context(scope: Scope) -> bool {
 
 const LEGACY_PREFIXES: [&str; 4] = ["-webkit-", "-moz-", "-ms-", "-o-"];
 const IMPORTANT_SUFFIX: &str = "!important";
-const DEPRECATION_TARGET_PROFILE: &str = "v1-baseline";
 
 const CSS_WIDE_KEYWORDS: [&str; 5] = ["inherit", "initial", "unset", "revert", "revert-layer"];
 
@@ -1433,7 +1461,7 @@ mod tests {
     use std::sync::atomic::{AtomicUsize, Ordering};
 
     use csslint_config::Config;
-    use csslint_core::{Diagnostic, FileId, RuleId, Scope, Severity, Span};
+    use csslint_core::{Diagnostic, FileId, RuleId, Scope, Severity, Span, TargetProfile};
     use csslint_semantic::{
         CssSemanticModel, DeclarationId, DeclarationNode, RuleNode, RuleNodeId, SelectorId,
         SelectorNode, SelectorPart, SelectorPartKind, SemanticIndexes,
@@ -2142,8 +2170,9 @@ mod tests {
         let empty_config = Config {
             rules: BTreeMap::new(),
         };
-        let diagnostics = run_with_registry(&semantic, &registry, &empty_config)
-            .expect("dispatch should run without config diagnostics");
+        let diagnostics =
+            run_with_registry(&semantic, &registry, &empty_config, TargetProfile::Defaults)
+                .expect("dispatch should run without config diagnostics");
         assert_eq!(diagnostics.len(), 5);
     }
 
@@ -2168,7 +2197,7 @@ mod tests {
         let empty_config = Config {
             rules: BTreeMap::new(),
         };
-        let _ = run_with_registry(&semantic, &registry, &empty_config)
+        let _ = run_with_registry(&semantic, &registry, &empty_config, TargetProfile::Defaults)
             .expect("off rule should not trigger config diagnostics");
 
         assert_eq!(OFF_RULE_CREATE_CALLS.load(Ordering::SeqCst), 0);
@@ -2328,8 +2357,9 @@ mod tests {
             rules: BTreeMap::new(),
         };
 
-        let diagnostics = run_with_registry(&semantic, &registry, &empty_config)
-            .expect("panic containment should not emit config diagnostics");
+        let diagnostics =
+            run_with_registry(&semantic, &registry, &empty_config, TargetProfile::Defaults)
+                .expect("panic containment should not emit config diagnostics");
         assert_eq!(diagnostics.len(), 2);
         assert!(diagnostics
             .iter()

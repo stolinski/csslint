@@ -1,6 +1,6 @@
 #![forbid(unsafe_code)]
 
-use csslint_core::{Diagnostic, FileId, RuleId, Scope, Severity, Span};
+use csslint_core::{Diagnostic, FileId, RuleId, Scope, Severity, Span, TargetProfile};
 use csslint_extractor::ExtractedStyle;
 #[cfg(feature = "lightning")]
 use lightningcss::properties::PropertyId;
@@ -10,6 +10,7 @@ use lightningcss::stylesheet::{ParserOptions, StyleSheet};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct CssParserOptions {
     pub enable_recovery: bool,
+    pub targets: TargetProfile,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

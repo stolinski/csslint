@@ -36,3 +36,4 @@
 - Fix-engine idempotency tests should exercise the full pipeline (`collect_fix_proposals` -> `resolve_file_overlaps` -> `apply_resolved_fixes`) so validation and conflict behavior are covered, not just raw edit application.
 - Deterministic CLI discovery is easiest to guarantee by sorting the final target file list globally and hard-coding v1 ignore directories (`node_modules`, build outputs, VCS dirs) before linting.
 - Strict `.csslint` validation is simplest when parsing to a JSON object with an explicit allowlist for top-level keys, then emitting per-field diagnostics (`rules.<id>`, `frameworks[i]`) instead of failing fast on the first error.
+- Preset handling is safest when the loader materializes a full rule map (`recommended`/`strict`/`minimal`) first, then applies `rules` overrides; target profile precedence should be CLI `--targets` > config `targets` > `defaults` and be threaded through parser + rule contexts.

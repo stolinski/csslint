@@ -6,12 +6,12 @@ use std::fmt;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use csslint_config::{format_diagnostics, load_for_target};
+use csslint_config::{format_diagnostics, load_for_target, parse_target_profile};
 use csslint_core::{Diagnostic, FileId, LineIndex};
 use csslint_extractor::extract_styles;
 use csslint_fix::apply_fixes;
-use csslint_parser::parse_style;
-use csslint_rules::{run_rules_with_config, sort_diagnostics};
+use csslint_parser::{parse_style_with_options, CssParserOptions};
+use csslint_rules::{run_rules_with_config_and_targets, sort_diagnostics};
 use csslint_semantic::build_semantic_model;
 use serde::Serialize;
 
@@ -46,6 +46,7 @@ enum OutputFormat {
 struct CliOptions {
     target_path: PathBuf,
     config_path: Option<PathBuf>,
+    targets_override: Option<String>,
     fix: bool,
     format: OutputFormat,
 }
@@ -181,6 +182,7 @@ where
 
     let mut target_path: Option<PathBuf> = None;
     let mut config_path: Option<PathBuf> = None;
+    let mut targets_override: Option<String> = None;
     let mut fix = false;
     let mut format = OutputFormat::Pretty;
 
@@ -218,9 +220,21 @@ where
                     }
                 };
             }
+            "--targets" => {
+                let Some(value) = args.next() else {
+                    return Err(CliError::usage(
+                        "missing value for --targets (expected target profile, e.g. defaults)",
+                    ));
+                };
+
+                if targets_override.is_some() {
+                    return Err(CliError::usage("--targets may only be provided once"));
+                }
+                targets_override = Some(value);
+            }
             "-h" | "--help" => {
                 return Err(CliError::usage(
-                    "usage: csslint <path> [--config <path>] [--fix] [--format json|pretty]",
+                    "usage: csslint <path> [--config <path>] [--targets <profile>] [--fix] [--format json|pretty]",
                 ));
             }
             _ if arg.starts_with('-') => {
@@ -239,13 +253,14 @@ where
 
     let Some(target_path) = target_path else {
         return Err(CliError::usage(
-            "missing path argument; usage: csslint <path> [--config <path>] [--fix] [--format json|pretty]",
+            "missing path argument; usage: csslint <path> [--config <path>] [--targets <profile>] [--fix] [--format json|pretty]",
         ));
     };
 
     Ok(CliOptions {
         target_path,
         config_path,
+        targets_override,
         fix,
         format,
     })
@@ -255,6 +270,10 @@ fn run_lint(options: &CliOptions) -> Result<LintResult, CliError> {
     let loaded_config = load_for_target(&options.target_path, options.config_path.as_deref())
         .map_err(|diagnostics| CliError::config(format_diagnostics(&diagnostics)))?;
     let config = loaded_config.config;
+    let target_profile = match options.targets_override.as_deref() {
+        Some(raw_targets) => parse_target_profile(raw_targets).map_err(CliError::usage)?,
+        None => loaded_config.targets,
+    };
 
     let target_files = discover_target_files(&options.target_path).map_err(|error| {
         CliError::runtime(format!(
@@ -280,10 +299,16 @@ fn run_lint(options: &CliOptions) -> Result<LintResult, CliError> {
         diagnostics.extend(extraction.diagnostics);
 
         for style in extraction.styles {
-            match parse_style(&style) {
+            match parse_style_with_options(
+                &style,
+                CssParserOptions {
+                    enable_recovery: false,
+                    targets: target_profile,
+                },
+            ) {
                 Ok(parsed) => {
                     let semantic = build_semantic_model(&parsed);
-                    match run_rules_with_config(&semantic, &config) {
+                    match run_rules_with_config_and_targets(&semantic, &config, target_profile) {
                         Ok(rule_diagnostics) => diagnostics.extend(rule_diagnostics),
                         Err(config_diagnostics) => {
                             let message = config_diagnostics
@@ -503,6 +528,7 @@ mod tests {
             CliOptions {
                 target_path: PathBuf::from("src"),
                 config_path: None,
+                targets_override: None,
                 fix: true,
                 format: OutputFormat::Json,
             }
@@ -543,6 +569,19 @@ mod tests {
     }
 
     #[test]
+    fn parse_cli_options_accepts_targets_override() {
+        let parsed = parse_cli_options([
+            "csslint".to_string(),
+            "src".to_string(),
+            "--targets".to_string(),
+            "defaults".to_string(),
+        ])
+        .expect("targets override should parse");
+
+        assert_eq!(parsed.targets_override.as_deref(), Some("defaults"));
+    }
+
+    #[test]
     fn parse_cli_options_requires_config_value() {
         let error = parse_cli_options([
             "csslint".to_string(),
@@ -553,6 +592,19 @@ mod tests {
 
         assert_eq!(error.kind, CliErrorKind::Usage);
         assert!(error.message.contains("missing value for --config"));
+    }
+
+    #[test]
+    fn parse_cli_options_requires_targets_value() {
+        let error = parse_cli_options([
+            "csslint".to_string(),
+            "src".to_string(),
+            "--targets".to_string(),
+        ])
+        .expect_err("--targets without value should fail");
+
+        assert_eq!(error.kind, CliErrorKind::Usage);
+        assert!(error.message.contains("missing value for --targets"));
     }
 
     #[test]

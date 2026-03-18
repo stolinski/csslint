@@ -167,6 +167,39 @@ impl fmt::Display for Severity {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum TargetProfile {
+    Defaults,
+}
+
+impl TargetProfile {
+    pub fn parse(raw: &str) -> Option<Self> {
+        if raw.eq_ignore_ascii_case("defaults") {
+            Some(Self::Defaults)
+        } else {
+            None
+        }
+    }
+
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Defaults => "defaults",
+        }
+    }
+}
+
+impl Default for TargetProfile {
+    fn default() -> Self {
+        Self::Defaults
+    }
+}
+
+impl fmt::Display for TargetProfile {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Scope {
     Global,
     VueScoped,
@@ -218,7 +251,7 @@ impl Diagnostic {
 
 #[cfg(test)]
 mod tests {
-    use super::{map_local_span_to_global, LineIndex, Severity, Span};
+    use super::{map_local_span_to_global, LineIndex, Severity, Span, TargetProfile};
 
     #[test]
     fn span_len_is_non_negative() {
@@ -260,5 +293,19 @@ mod tests {
 
         assert_eq!(global.start, 43);
         assert_eq!(global.end, 48);
+    }
+
+    #[test]
+    fn parses_and_formats_target_profiles() {
+        assert_eq!(
+            TargetProfile::parse("defaults"),
+            Some(TargetProfile::Defaults)
+        );
+        assert_eq!(
+            TargetProfile::parse("DEFAULTS"),
+            Some(TargetProfile::Defaults)
+        );
+        assert_eq!(TargetProfile::parse("modern"), None);
+        assert_eq!(TargetProfile::Defaults.as_str(), "defaults");
     }
 }

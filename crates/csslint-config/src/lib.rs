@@ -4,7 +4,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use csslint_core::{RuleId, Severity};
+use csslint_core::{RuleId, Severity, TargetProfile};
 use serde_json::Value;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -61,9 +61,9 @@ pub enum ConfigSource {
 pub struct LoadedConfig {
     pub config: Config,
     pub source: ConfigSource,
-    pub preset: Option<PresetName>,
+    pub preset: PresetName,
     pub frameworks: Vec<FrameworkName>,
-    pub targets: Option<String>,
+    pub targets: TargetProfile,
     pub fix: Option<bool>,
 }
 
@@ -72,9 +72,9 @@ impl LoadedConfig {
         Self {
             config: Config::default(),
             source: ConfigSource::Defaults,
-            preset: None,
+            preset: PresetName::Recommended,
             frameworks: Vec::new(),
-            targets: None,
+            targets: TargetProfile::Defaults,
             fix: None,
         }
     }
@@ -99,11 +99,9 @@ impl ConfigDiagnostic {
 
 impl Default for Config {
     fn default() -> Self {
-        let mut rules = BTreeMap::new();
-        rules.insert(RuleId::from("no_empty_rules"), Severity::Warn);
-        rules.insert(RuleId::from("no_global_leaks"), Severity::Error);
-
-        Self { rules }
+        Self {
+            rules: expand_preset_rules(PresetName::Recommended),
+        }
     }
 }
 
@@ -119,6 +117,77 @@ pub fn parse_severity(raw: &str) -> Result<Severity, String> {
         _ => Err(format!(
             "Invalid severity '{raw}'. Expected off, warn, or error."
         )),
+    }
+}
+
+pub fn parse_target_profile(raw: &str) -> Result<TargetProfile, String> {
+    TargetProfile::parse(raw)
+        .ok_or_else(|| format!("Invalid targets value '{raw}'. Expected one of: defaults."))
+}
+
+pub fn expand_preset_rules(preset: PresetName) -> BTreeMap<RuleId, Severity> {
+    let mut rules = BTreeMap::new();
+    for rule_id in canonical_rule_id_order() {
+        let Some(severity) = preset_severity_for_rule(preset, rule_id) else {
+            continue;
+        };
+        rules.insert(RuleId::from(*rule_id), severity);
+    }
+
+    rules
+}
+
+pub fn canonical_rule_id_order() -> &'static [&'static str] {
+    &[
+        "no_unknown_properties",
+        "no_invalid_values",
+        "no_duplicate_selectors",
+        "no_duplicate_declarations",
+        "no_empty_rules",
+        "no_legacy_vendor_prefixes",
+        "no_overqualified_selectors",
+        "prefer_logical_properties",
+        "no_global_leaks",
+        "no_deprecated_features",
+    ]
+}
+
+fn preset_severity_for_rule(preset: PresetName, rule_id: &str) -> Option<Severity> {
+    match preset {
+        PresetName::Recommended => Some(match rule_id {
+            "no_unknown_properties"
+            | "no_invalid_values"
+            | "no_duplicate_selectors"
+            | "no_duplicate_declarations"
+            | "no_global_leaks" => Severity::Error,
+            "no_empty_rules"
+            | "no_legacy_vendor_prefixes"
+            | "no_overqualified_selectors"
+            | "prefer_logical_properties"
+            | "no_deprecated_features" => Severity::Warn,
+            _ => return None,
+        }),
+        PresetName::Strict => Some(match rule_id {
+            "no_unknown_properties"
+            | "no_invalid_values"
+            | "no_duplicate_selectors"
+            | "no_duplicate_declarations"
+            | "no_empty_rules"
+            | "no_legacy_vendor_prefixes"
+            | "no_overqualified_selectors"
+            | "prefer_logical_properties"
+            | "no_global_leaks"
+            | "no_deprecated_features" => Severity::Error,
+            _ => return None,
+        }),
+        PresetName::Minimal => match rule_id {
+            "no_unknown_properties"
+            | "no_invalid_values"
+            | "no_duplicate_selectors"
+            | "no_duplicate_declarations"
+            | "no_global_leaks" => Some(Severity::Error),
+            _ => None,
+        },
     }
 }
 
@@ -250,9 +319,9 @@ fn parse_config_document(
 
     let mut diagnostics = Vec::new();
     let mut rule_overrides: BTreeMap<RuleId, Severity> = BTreeMap::new();
-    let mut preset = None;
+    let mut preset = PresetName::Recommended;
     let mut frameworks = Vec::new();
-    let mut targets = None;
+    let mut targets = TargetProfile::Defaults;
     let mut fix = None;
 
     let allowed_keys = ["preset", "frameworks", "targets", "fix", "rules"];
@@ -271,7 +340,7 @@ fn parse_config_document(
     if let Some(value) = root.get("preset") {
         match value {
             Value::String(raw_preset) => match PresetName::parse(raw_preset) {
-                Ok(valid_preset) => preset = Some(valid_preset),
+                Ok(valid_preset) => preset = valid_preset,
                 Err(message) => diagnostics.push(ConfigDiagnostic::new(
                     file_path.clone(),
                     Some("preset".to_string()),
@@ -323,9 +392,16 @@ fn parse_config_document(
 
     if let Some(value) = root.get("targets") {
         match value {
-            Value::String(raw_targets) => {
-                targets = Some(raw_targets.clone());
-            }
+            Value::String(raw_targets) => match parse_target_profile(raw_targets) {
+                Ok(profile) => {
+                    targets = profile;
+                }
+                Err(message) => diagnostics.push(ConfigDiagnostic::new(
+                    file_path.clone(),
+                    Some("targets".to_string()),
+                    message,
+                )),
+            },
             _ => diagnostics.push(ConfigDiagnostic::new(
                 file_path.clone(),
                 Some("targets".to_string()),
@@ -369,7 +445,9 @@ fn parse_config_document(
         return Err(diagnostics);
     }
 
-    let mut config = Config::default();
+    let mut config = Config {
+        rules: expand_preset_rules(preset),
+    };
     for (rule_id, severity) in rule_overrides {
         config.rules.insert(rule_id, severity);
     }
@@ -474,11 +552,11 @@ mod tests {
     use std::path::{Path, PathBuf};
     use std::time::{SystemTime, UNIX_EPOCH};
 
-    use csslint_core::Severity;
+    use csslint_core::{Severity, TargetProfile};
 
     use crate::{
-        config_file_name, discover_nearest_config_path, format_diagnostics, from_raw_rules,
-        load_for_target, parse_severity, ConfigSource, FrameworkName, PresetName,
+        config_file_name, discover_nearest_config_path, expand_preset_rules, format_diagnostics,
+        from_raw_rules, load_for_target, parse_severity, ConfigSource, FrameworkName, PresetName,
     };
 
     #[test]
@@ -543,9 +621,9 @@ mod tests {
         let loaded =
             load_for_target(&fixture.path().join("src"), None).expect("defaults should load");
         assert_eq!(loaded.source, ConfigSource::Defaults);
-        assert!(loaded.preset.is_none());
+        assert_eq!(loaded.preset, PresetName::Recommended);
         assert!(loaded.frameworks.is_empty());
-        assert!(loaded.targets.is_none());
+        assert_eq!(loaded.targets, TargetProfile::Defaults);
     }
 
     #[test]
@@ -561,9 +639,9 @@ mod tests {
         let loaded =
             load_for_target(fixture.path(), Some(&explicit)).expect("explicit config should win");
         assert_eq!(loaded.source, ConfigSource::Explicit(explicit));
-        assert_eq!(loaded.preset, Some(PresetName::Strict));
+        assert_eq!(loaded.preset, PresetName::Strict);
         assert_eq!(loaded.frameworks, vec![FrameworkName::Vue]);
-        assert_eq!(loaded.targets.as_deref(), Some("defaults"));
+        assert_eq!(loaded.targets, TargetProfile::Defaults);
         assert_eq!(loaded.fix, Some(true));
         assert_eq!(
             loaded.config.rules.get(&"no_empty_rules".into()),
@@ -614,6 +692,53 @@ mod tests {
         let diagnostics =
             load_for_target(fixture.path(), None).expect_err("type errors should fail");
         assert_eq!(diagnostics.len(), 5);
+    }
+
+    #[test]
+    fn load_rejects_unknown_targets_profile() {
+        let fixture = TempFixture::new("config-target-errors");
+        fixture.write(config_file_name(), "{ \"targets\": \"modern\" }");
+
+        let diagnostics =
+            load_for_target(fixture.path(), None).expect_err("unknown targets should fail");
+        assert_eq!(diagnostics.len(), 1);
+        assert!(diagnostics[0].message.contains("Invalid targets value"));
+    }
+
+    #[test]
+    fn expands_presets_to_expected_rule_sets() {
+        let recommended = expand_preset_rules(PresetName::Recommended);
+        let strict = expand_preset_rules(PresetName::Strict);
+        let minimal = expand_preset_rules(PresetName::Minimal);
+
+        assert_eq!(recommended.len(), 10);
+        assert_eq!(strict.len(), 10);
+        assert_eq!(minimal.len(), 5);
+        assert_eq!(
+            strict.get(&"prefer_logical_properties".into()),
+            Some(&Severity::Error)
+        );
+        assert_eq!(minimal.get(&"prefer_logical_properties".into()), None);
+    }
+
+    #[test]
+    fn load_applies_rule_overrides_after_preset_expansion() {
+        let fixture = TempFixture::new("config-preset-overrides");
+        fixture.write(
+            config_file_name(),
+            "{ \"preset\": \"minimal\", \"rules\": { \"no_empty_rules\": \"warn\" } }",
+        );
+
+        let loaded = load_for_target(fixture.path(), None).expect("config should parse");
+        assert_eq!(loaded.preset, PresetName::Minimal);
+        assert_eq!(
+            loaded.config.rules.get(&"no_empty_rules".into()),
+            Some(&Severity::Warn)
+        );
+        assert_eq!(
+            loaded.config.rules.get(&"no_legacy_vendor_prefixes".into()),
+            None
+        );
     }
 
     struct TempFixture {
