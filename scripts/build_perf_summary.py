@@ -78,6 +78,7 @@ def main() -> int:
                     "mbPerSecond": css_median["mbPerSecond"],
                     "p50FileMs": css_median["p50FileMs"],
                     "p95FileMs": css_median["p95FileMs"],
+                    "peakRssBytes": css_median.get("peakRssBytes", 0),
                     "parseMs": css_median["parseMs"],
                     "semanticMs": css_median["semanticMs"],
                     "rulesMs": css_median["rulesMs"],

@@ -42,6 +42,7 @@ pub struct IterationSummary {
     pub rules_ms: f64,
     pub p50_file_ms: f64,
     pub p95_file_ms: f64,
+    pub peak_rss_bytes: u64,
 }
 
 #[derive(Debug, Clone)]
@@ -123,6 +124,7 @@ pub fn run_corpus_benchmark(
         rules_ms: 0.0,
         p50_file_ms: 0.0,
         p95_file_ms: 0.0,
+        peak_rss_bytes: 0,
     });
 
     Ok(CorpusSummary {
@@ -142,6 +144,7 @@ fn run_single_iteration(sources: &[(PathBuf, String)]) -> Result<IterationSummar
     let mut semantic_ms = 0.0;
     let mut rules_ms = 0.0;
     let mut per_file_ms = Vec::with_capacity(sources.len());
+    let mut peak_rss_bytes = current_peak_rss_bytes();
 
     for (index, (path, source)) in sources.iter().enumerate() {
         let file_started = Instant::now();
@@ -195,6 +198,7 @@ fn run_single_iteration(sources: &[(PathBuf, String)]) -> Result<IterationSummar
 
         sort_diagnostics(&mut diagnostics);
         per_file_ms.push(file_started.elapsed().as_secs_f64() * 1000.0);
+        peak_rss_bytes = peak_rss_bytes.max(current_peak_rss_bytes());
     }
 
     let total_ms = run_started.elapsed().as_secs_f64() * 1000.0;
@@ -226,6 +230,7 @@ fn run_single_iteration(sources: &[(PathBuf, String)]) -> Result<IterationSummar
         rules_ms,
         p50_file_ms,
         p95_file_ms,
+        peak_rss_bytes,
     })
 }
 
@@ -296,4 +301,26 @@ fn digest_sources(sources: &[(PathBuf, String)]) -> String {
         }
     }
     format!("{hash:016x}")
+}
+
+fn current_peak_rss_bytes() -> u64 {
+    let pid = std::process::id().to_string();
+    let output = std::process::Command::new("ps")
+        .args(["-o", "rss=", "-p", pid.as_str()])
+        .output();
+
+    let Ok(output) = output else {
+        return 0;
+    };
+
+    if !output.status.success() {
+        return 0;
+    }
+
+    let raw = String::from_utf8_lossy(&output.stdout);
+    let Some(kilobytes) = raw.trim().parse::<u64>().ok() else {
+        return 0;
+    };
+
+    kilobytes * 1024
 }
