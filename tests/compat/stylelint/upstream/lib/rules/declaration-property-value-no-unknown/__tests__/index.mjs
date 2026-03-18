@@ -13,7 +13,7 @@ testRule({
       description: "reject unknown display value",
       message: "Invalid value 'squish' for property 'display'",
       line: 1,
-      column: 5,
+      column: 4,
       fast: true
     },
     {
@@ -21,7 +21,7 @@ testRule({
       description: "reject out of range opacity",
       message: "Invalid value '2' for property 'opacity'",
       line: 1,
-      column: 5
+      column: 4
     }
   ]
 });

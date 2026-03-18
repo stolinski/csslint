@@ -40,3 +40,4 @@
 - Pretty reporter determinism is easiest to preserve by rendering from an already-sorted diagnostic list, grouping by file path, and deriving optional code frames from immutable per-file source snapshots captured during linting.
 - Schema-stable JSON output is easier to keep compatible when the reporter always emits the full v1 envelope (`schemaVersion`, `summary`, `diagnostics`, `internalErrors`, `timing`) and computes `summary.exitCode` from the same result object used by CLI exit handling.
 - CLI integration tests are more portable when they fall back to a built `target/debug/csslint` binary if `CARGO_BIN_EXE_csslint` is unavailable, so exit-code and snapshot assertions still run in package-scoped test commands.
+- Imported Stylelint fixture locations should be calibrated against CSSLint diagnostic span starts (for example declaration diagnostics in `a { ... }` often begin at column 4), so compat expectations stay stable across harness runs.

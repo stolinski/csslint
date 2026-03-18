@@ -59,7 +59,7 @@
             "severity": "error",
             "messageContains": "Unknown property 'colr'",
             "line": 1,
-            "column": 5
+            "column": 4
           }
         ],
         "fixed": null

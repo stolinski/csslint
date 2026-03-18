@@ -14,7 +14,7 @@ testRule({
       description: "reject vendor-prefixed property",
       message: "Legacy vendor-prefixed property '-webkit-transform'",
       line: 1,
-      column: 5,
+      column: 4,
       fixed: "a { transform: rotate(0); }",
       fast: true
     }

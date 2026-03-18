@@ -14,7 +14,7 @@ testRule({
       description: "reject vendor-prefixed value",
       message: "Legacy vendor-prefixed value '-webkit-flex'",
       line: 1,
-      column: 5,
+      column: 4,
       fixed: "a { display: flex; }",
       fast: true
     },

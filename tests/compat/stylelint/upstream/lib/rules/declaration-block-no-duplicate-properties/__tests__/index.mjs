@@ -12,7 +12,7 @@ testRule({
       description: "ignore duplicate values with stylelint option",
       message: "Unexpected duplicate declaration",
       line: 1,
-      column: 17,
+      column: 16,
       skipReason: "unsupported_option",
       skipNote: "ignore options for duplicate declaration handling are out of scope for v1."
     }
@@ -23,8 +23,8 @@ testRule({
       description: "reject duplicate declaration",
       message: "Duplicate declaration 'color: red'",
       line: 1,
-      column: 17,
-      fixed: "a { color: red;  }",
+      column: 16,
+      fixed: "a { color: red; }",
       fast: true
     }
   ]

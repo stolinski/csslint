@@ -65,7 +65,7 @@
             "severity": "error",
             "messageContains": "Legacy vendor-prefixed value '-webkit-flex'",
             "line": 1,
-            "column": 5
+            "column": 4
           }
         ],
         "fixed": "a { display: flex; }"

@@ -6,10 +6,13 @@ on:
       - Cargo.toml
       - rust-toolchain.toml
       - crates/**
+      - tests/compat/stylelint/**
       - docs/json-output-schema-v1.schema.json
       - docs/json-output-schema-v1.md
       - docs/fixtures/json-output/**
       - scripts/validate_json_output_schema.py
+      - scripts/import_stylelint_fixtures.mjs
+      - scripts/validate_stylelint_skip_manifest.py
       - scripts/check_internal_deps.py
       - .github/workflows/rust-ci.yml
   push:
@@ -19,12 +22,17 @@ on:
       - Cargo.toml
       - rust-toolchain.toml
       - crates/**
+      - tests/compat/stylelint/**
       - docs/json-output-schema-v1.schema.json
       - docs/json-output-schema-v1.md
       - docs/fixtures/json-output/**
       - scripts/validate_json_output_schema.py
+      - scripts/import_stylelint_fixtures.mjs
+      - scripts/validate_stylelint_skip_manifest.py
       - scripts/check_internal_deps.py
       - .github/workflows/rust-ci.yml
+  schedule:
+    - cron: "0 6 * * *"
 
 jobs:
   check:
@@ -91,6 +99,50 @@ jobs:
 
       - name: Run integration smoke suite
         run: cargo test -p csslint-test-harness --test smoke_pipeline
+
+  compat-fast:
+    runs-on: ubuntu-latest
+    needs: [check]
+    if: github.event_name == 'pull_request'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.82.0
+
+      - name: Verify imported compatibility fixtures are deterministic
+        run: node scripts/import_stylelint_fixtures.mjs --check
+
+      - name: Validate skip manifest governance
+        run: python3 scripts/validate_stylelint_skip_manifest.py
+
+      - name: Run compat-fast curated suite
+        run: cargo test -p csslint-test-harness --test stylelint_compat_harness compat_fast_suite_passes
+
+  compat-full:
+    runs-on: ubuntu-latest
+    needs: [check]
+    if: github.event_name != 'pull_request'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.82.0
+
+      - name: Verify imported compatibility fixtures are deterministic
+        run: node scripts/import_stylelint_fixtures.mjs --check
+
+      - name: Validate skip manifest governance
+        run: python3 scripts/validate_stylelint_skip_manifest.py
+
+      - name: Run compat-full imported suite
+        run: cargo test -p csslint-test-harness --test stylelint_compat_harness compat_full_suite_passes_with_manifest_skips
 
   json-schema:
     runs-on: ubuntu-latest

@@ -222,6 +222,7 @@ dependencies = [
 name = "csslint-test-harness"
 version = "0.1.0"
 dependencies = [
+ "csslint-config",
  "csslint-core",
  "csslint-extractor",
  "csslint-fix",

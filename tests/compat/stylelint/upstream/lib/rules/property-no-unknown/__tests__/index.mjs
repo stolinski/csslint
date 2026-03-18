@@ -11,7 +11,7 @@ testRule({
       description: "ignore unknown property via option",
       message: "Unexpected unknown property",
       line: 1,
-      column: 5,
+      column: 4,
       skipReason: "unsupported_option",
       skipNote: "ignoreProperties option is outside the v1 compatibility subset."
     }
@@ -22,7 +22,7 @@ testRule({
       description: "reject unknown property",
       message: "Unknown property 'colr'",
       line: 1,
-      column: 5,
+      column: 4,
       fast: true
     }
   ]

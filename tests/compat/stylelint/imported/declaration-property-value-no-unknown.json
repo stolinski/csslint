@@ -41,7 +41,7 @@
             "severity": "error",
             "messageContains": "Invalid value '2' for property 'opacity'",
             "line": 1,
-            "column": 5
+            "column": 4
           }
         ],
         "fixed": null
@@ -63,7 +63,7 @@
             "severity": "error",
             "messageContains": "Invalid value 'squish' for property 'display'",
             "line": 1,
-            "column": 5
+            "column": 4
           }
         ],
         "fixed": null

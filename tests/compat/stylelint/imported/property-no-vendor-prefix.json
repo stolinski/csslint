@@ -39,7 +39,7 @@
             "severity": "error",
             "messageContains": "Legacy vendor-prefixed property '-webkit-transform'",
             "line": 1,
-            "column": 5
+            "column": 4
           }
         ],
         "fixed": "a { transform: rotate(0); }"

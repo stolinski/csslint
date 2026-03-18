@@ -59,10 +59,10 @@
             "severity": "error",
             "messageContains": "Duplicate declaration 'color: red'",
             "line": 1,
-            "column": 17
+            "column": 16
           }
         ],
-        "fixed": "a { color: red;  }"
+        "fixed": "a { color: red; }"
       },
       "source": {
         "description": "reject duplicate declaration",
