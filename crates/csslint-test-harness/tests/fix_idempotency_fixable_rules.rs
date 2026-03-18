@@ -1,0 +1,96 @@
+use std::path::Path;
+
+use csslint_core::{Diagnostic, FileId};
+
+const FIXABLE_RULES: [&str; 4] = [
+    "no_empty_rules",
+    "no_duplicate_declarations",
+    "no_legacy_vendor_prefixes",
+    "prefer_logical_properties",
+];
+
+#[test]
+fn fixable_rules_are_idempotent_across_css_vue_and_svelte() {
+    run_idempotency_case(
+        "fixture.css",
+        ".empty {}\n.box { color: red; color: red; -webkit-transform: rotate(0); display: -webkit-flex; margin-left: 1rem; }\n",
+    );
+
+    run_idempotency_case(
+        "Fixture.vue",
+        "<template><div class=\"box\"></div></template>\n<style scoped>\n.empty {}\n.box { color: red; color: red; -webkit-transform: rotate(0); display: -webkit-flex; margin-left: 1rem; }\n</style>\n",
+    );
+
+    run_idempotency_case(
+        "Fixture.svelte",
+        "<script>let count = 0;</script>\n<style>\n.empty {}\n.box { color: red; color: red; -webkit-transform: rotate(0); display: -webkit-flex; margin-left: 1rem; }\n</style>\n",
+    );
+}
+
+fn run_idempotency_case(path: &str, source: &str) {
+    let first_pass = lint_source(path, source, FileId::new(950));
+    let fixable_first = fixable_diagnostics(&first_pass);
+
+    for rule in FIXABLE_RULES {
+        assert!(
+            fixable_first
+                .iter()
+                .any(|diagnostic| diagnostic.rule_id.as_str() == rule),
+            "{path} should report {rule} in first pass"
+        );
+    }
+
+    let first_fixes = diagnostics_to_fixes(&fixable_first);
+    assert!(
+        !first_fixes.is_empty(),
+        "{path} should produce fixable diagnostics in first pass"
+    );
+
+    let (fixed_source, applied_first) = csslint_fix::apply_fixes(source, &first_fixes);
+    assert!(applied_first > 0, "{path} should apply at least one fix");
+
+    let second_pass = lint_source(path, &fixed_source, FileId::new(951));
+    let fixable_second = fixable_diagnostics(&second_pass);
+    assert!(
+        fixable_second.is_empty(),
+        "{path} should be clean for all fixable rules after first fix pass"
+    );
+
+    let second_fixes = diagnostics_to_fixes(&fixable_second);
+    let (second_fixed_source, applied_second) =
+        csslint_fix::apply_fixes(&fixed_source, &second_fixes);
+    assert_eq!(applied_second, 0, "{path} second fix pass must be a no-op");
+    assert_eq!(
+        second_fixed_source, fixed_source,
+        "{path} second pass should not change output"
+    );
+}
+
+fn lint_source(path: &str, source: &str, file_id: FileId) -> Vec<Diagnostic> {
+    let extraction = csslint_extractor::extract_styles(file_id, Path::new(path), source);
+    let mut diagnostics = extraction.diagnostics;
+
+    for style in extraction.styles {
+        if let Ok(parsed) = csslint_parser::parse_style(&style) {
+            let semantic = csslint_semantic::build_semantic_model(&parsed);
+            diagnostics.extend(csslint_rules::run_rules(&semantic));
+        }
+    }
+
+    diagnostics
+}
+
+fn fixable_diagnostics(diagnostics: &[Diagnostic]) -> Vec<Diagnostic> {
+    diagnostics
+        .iter()
+        .filter(|diagnostic| FIXABLE_RULES.contains(&diagnostic.rule_id.as_str()))
+        .cloned()
+        .collect()
+}
+
+fn diagnostics_to_fixes(diagnostics: &[Diagnostic]) -> Vec<csslint_core::Fix> {
+    diagnostics
+        .iter()
+        .filter_map(|diagnostic| diagnostic.fix.clone())
+        .collect()
+}

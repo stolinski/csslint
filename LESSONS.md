@@ -27,3 +27,4 @@
 - Keep `no_unknown_properties` cheap by annotating `DeclarationNode.property_known` during semantic build via `csslint_parser::is_known_property_name`; this preserves the parser-boundary contract while avoiding rule-time parser coupling.
 - For `no_invalid_values`, low-noise behavior comes from validating only single-token high-confidence subsets and skipping dynamic/complex functions (`var`, `env`, `calc`, `min`, `max`, `clamp`, `attr`) by default.
 - For `no_global_leaks`, a conservative high-confidence policy is to flag only selectors that are entirely `:global(...)` in scoped contexts, while allowing mixed scoped+global selectors as intentional escapes.
+- Fix idempotency is most reliable when tested with multiple fixable rules in the same fixture across `.css`, `.vue`, and `.svelte`, since cross-rule edit ordering can hide second-pass regressions.
