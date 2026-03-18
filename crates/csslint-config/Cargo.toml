@@ -9,3 +9,4 @@ path = "src/lib.rs"
 
 [dependencies]
 csslint-core = { path = "../csslint-core" }
+serde_json = "1"

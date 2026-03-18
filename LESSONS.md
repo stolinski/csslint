@@ -35,3 +35,4 @@
 - Descending byte-range application works best when paired with UTF-8 boundary checks; this keeps offset math stable and preserves untouched CRLF/newline bytes exactly.
 - Fix-engine idempotency tests should exercise the full pipeline (`collect_fix_proposals` -> `resolve_file_overlaps` -> `apply_resolved_fixes`) so validation and conflict behavior are covered, not just raw edit application.
 - Deterministic CLI discovery is easiest to guarantee by sorting the final target file list globally and hard-coding v1 ignore directories (`node_modules`, build outputs, VCS dirs) before linting.
+- Strict `.csslint` validation is simplest when parsing to a JSON object with an explicit allowlist for top-level keys, then emitting per-field diagnostics (`rules.<id>`, `frameworks[i]`) instead of failing fast on the first error.

@@ -6,7 +6,7 @@ use std::fmt;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use csslint_config::Config;
+use csslint_config::{format_diagnostics, load_for_target};
 use csslint_core::{Diagnostic, FileId, LineIndex};
 use csslint_extractor::extract_styles;
 use csslint_fix::apply_fixes;
@@ -45,6 +45,7 @@ enum OutputFormat {
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct CliOptions {
     target_path: PathBuf,
+    config_path: Option<PathBuf>,
     fix: bool,
     format: OutputFormat,
 }
@@ -179,6 +180,7 @@ where
     let _binary = args.next();
 
     let mut target_path: Option<PathBuf> = None;
+    let mut config_path: Option<PathBuf> = None;
     let mut fix = false;
     let mut format = OutputFormat::Pretty;
 
@@ -186,6 +188,18 @@ where
         match arg.as_str() {
             "--fix" => {
                 fix = true;
+            }
+            "--config" => {
+                let Some(value) = args.next() else {
+                    return Err(CliError::usage(
+                        "missing value for --config (expected path to JSON .csslint file)",
+                    ));
+                };
+
+                if config_path.is_some() {
+                    return Err(CliError::usage("--config may only be provided once"));
+                }
+                config_path = Some(PathBuf::from(value));
             }
             "--format" => {
                 let Some(value) = args.next() else {
@@ -206,7 +220,7 @@ where
             }
             "-h" | "--help" => {
                 return Err(CliError::usage(
-                    "usage: csslint <path> [--fix] [--format json|pretty]",
+                    "usage: csslint <path> [--config <path>] [--fix] [--format json|pretty]",
                 ));
             }
             _ if arg.starts_with('-') => {
@@ -225,19 +239,23 @@ where
 
     let Some(target_path) = target_path else {
         return Err(CliError::usage(
-            "missing path argument; usage: csslint <path> [--fix] [--format json|pretty]",
+            "missing path argument; usage: csslint <path> [--config <path>] [--fix] [--format json|pretty]",
         ));
     };
 
     Ok(CliOptions {
         target_path,
+        config_path,
         fix,
         format,
     })
 }
 
 fn run_lint(options: &CliOptions) -> Result<LintResult, CliError> {
-    let config = Config::default();
+    let loaded_config = load_for_target(&options.target_path, options.config_path.as_deref())
+        .map_err(|diagnostics| CliError::config(format_diagnostics(&diagnostics)))?;
+    let config = loaded_config.config;
+
     let target_files = discover_target_files(&options.target_path).map_err(|error| {
         CliError::runtime(format!(
             "failed to discover lint targets under '{}': {error}",
@@ -484,6 +502,7 @@ mod tests {
             parsed,
             CliOptions {
                 target_path: PathBuf::from("src"),
+                config_path: None,
                 fix: true,
                 format: OutputFormat::Json,
             }
@@ -508,6 +527,32 @@ mod tests {
 
         assert_eq!(error.kind, CliErrorKind::Usage);
         assert!(error.message.contains("unknown flag"));
+    }
+
+    #[test]
+    fn parse_cli_options_accepts_explicit_config_path() {
+        let parsed = parse_cli_options([
+            "csslint".to_string(),
+            "src".to_string(),
+            "--config".to_string(),
+            "configs/lint.json".to_string(),
+        ])
+        .expect("explicit config path should parse");
+
+        assert_eq!(parsed.config_path, Some(PathBuf::from("configs/lint.json")));
+    }
+
+    #[test]
+    fn parse_cli_options_requires_config_value() {
+        let error = parse_cli_options([
+            "csslint".to_string(),
+            "src".to_string(),
+            "--config".to_string(),
+        ])
+        .expect_err("--config without value should fail");
+
+        assert_eq!(error.kind, CliErrorKind::Usage);
+        assert!(error.message.contains("missing value for --config"));
     }
 
     #[test]
