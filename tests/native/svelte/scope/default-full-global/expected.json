@@ -1,0 +1,13 @@
+{
+  "style_scope": "svelte_scoped",
+  "selectors": [
+    {
+      "raw": ":global(#app)",
+      "normalized": ":global(#app)",
+      "part_scopes": ["global"]
+    }
+  ],
+  "scope_index_counts": {
+    "global": 1
+  }
+}

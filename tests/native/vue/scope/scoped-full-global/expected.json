@@ -1,0 +1,13 @@
+{
+  "style_scope": "vue_scoped",
+  "selectors": [
+    {
+      "raw": ":global(.theme-root)",
+      "normalized": ":global(.theme-root)",
+      "part_scopes": ["global"]
+    }
+  ],
+  "scope_index_counts": {
+    "global": 1
+  }
+}

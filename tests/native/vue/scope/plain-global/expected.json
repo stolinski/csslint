@@ -1,0 +1,13 @@
+{
+  "style_scope": "global",
+  "selectors": [
+    {
+      "raw": ".global",
+      "normalized": ".global",
+      "part_scopes": ["global"]
+    }
+  ],
+  "scope_index_counts": {
+    "global": 1
+  }
+}

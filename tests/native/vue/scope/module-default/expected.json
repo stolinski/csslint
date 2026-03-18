@@ -1,0 +1,13 @@
+{
+  "style_scope": "vue_module",
+  "selectors": [
+    {
+      "raw": ".mod",
+      "normalized": ".mod",
+      "part_scopes": ["vue_module"]
+    }
+  ],
+  "scope_index_counts": {
+    "vue_module": 1
+  }
+}

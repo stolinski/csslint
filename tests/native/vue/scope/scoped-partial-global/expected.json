@@ -1,0 +1,14 @@
+{
+  "style_scope": "vue_scoped",
+  "selectors": [
+    {
+      "raw": ".card :global(.theme-root) .badge",
+      "normalized": ".card :global(.theme-root) .badge",
+      "part_scopes": ["vue_scoped", "global", "vue_scoped"]
+    }
+  ],
+  "scope_index_counts": {
+    "global": 1,
+    "vue_scoped": 1
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "style_scope": "svelte_scoped",
+  "selectors": [
+    {
+      "raw": ".title",
+      "normalized": ".title",
+      "part_scopes": ["svelte_scoped"]
+    }
+  ],
+  "scope_index_counts": {
+    "svelte_scoped": 1
+  }
+}
