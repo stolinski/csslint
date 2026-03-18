@@ -34,3 +34,4 @@
 - Overlap resolution stays repeatable when candidates are ranked globally by severity, then priority, then span length, then rule ID before conflict checks.
 - Descending byte-range application works best when paired with UTF-8 boundary checks; this keeps offset math stable and preserves untouched CRLF/newline bytes exactly.
 - Fix-engine idempotency tests should exercise the full pipeline (`collect_fix_proposals` -> `resolve_file_overlaps` -> `apply_resolved_fixes`) so validation and conflict behavior are covered, not just raw edit application.
+- Deterministic CLI discovery is easiest to guarantee by sorting the final target file list globally and hard-coding v1 ignore directories (`node_modules`, build outputs, VCS dirs) before linting.

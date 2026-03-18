@@ -158,6 +158,8 @@ dependencies = [
  "csslint-parser",
  "csslint-rules",
  "csslint-semantic",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

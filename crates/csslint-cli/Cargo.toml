@@ -16,3 +16,5 @@ csslint-fix = { path = "../csslint-fix" }
 csslint-parser = { path = "../csslint-parser" }
 csslint-rules = { path = "../csslint-rules" }
 csslint-semantic = { path = "../csslint-semantic" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
