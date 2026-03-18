@@ -1,0 +1,16 @@
+{
+  "styles": [
+    {
+      "framework": "vue",
+      "scoped": true,
+      "module": false,
+      "content": "\n.local { color: blue; }\n"
+    }
+  ],
+  "diagnostics": [
+    {
+      "rule_id": "unsupported_external_style_src",
+      "severity": "warn"
+    }
+  ]
+}

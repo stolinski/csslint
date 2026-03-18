@@ -1,0 +1,23 @@
+{
+  "styles": [
+    {
+      "framework": "vue",
+      "scoped": false,
+      "module": true,
+      "content": "\n.alpha { color: red; }\n"
+    },
+    {
+      "framework": "vue",
+      "scoped": false,
+      "module": true,
+      "content": "\n.beta { color: blue; }\n"
+    },
+    {
+      "framework": "vue",
+      "scoped": false,
+      "module": false,
+      "content": "\n.gamma { color: black; }\n"
+    }
+  ],
+  "diagnostics": []
+}
