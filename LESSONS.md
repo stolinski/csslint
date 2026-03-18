@@ -30,3 +30,4 @@
 - Fix idempotency is most reliable when tested with multiple fixable rules in the same fixture across `.css`, `.vue`, and `.svelte`, since cross-rule edit ordering can hide second-pass regressions.
 - A stable rule-test matrix gate is easiest to enforce with one deterministic corpus per context (`imported.css`, native `.css`, `.vue`, `.svelte`) plus explicit per-rule report/no-report assertions.
 - Keep rule specs explicit about conservative parser limits (for example duplicate selector context partitioning and string-segment overqualification checks) so docs do not imply full grammar coverage.
+- Fix collection should stage proposals by `FileId` and validate span integrity (`start <= end`, in-bounds) up front so malformed fix hints are rejected without risking applier panics.
