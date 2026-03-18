@@ -61,7 +61,7 @@ pub fn discover_corpus_inputs(root: &Path) -> Result<Vec<CorpusInput>, String> {
         .collect::<Result<Vec<_>, std::io::Error>>()
         .map_err(|error| format!("failed to enumerate corpora '{}': {error}", root.display()))?;
 
-    inputs.sort_by(|left, right| left.file_name().cmp(&right.file_name()));
+    inputs.sort_by_key(|entry| entry.file_name());
 
     let mut corpora = Vec::new();
     for entry in inputs {
@@ -259,7 +259,7 @@ fn discover_lint_files(root: &Path) -> Result<Vec<PathBuf>, String> {
             .map_err(|error| format!("failed to read '{}': {error}", directory.display()))?
             .collect::<Result<Vec<_>, std::io::Error>>()
             .map_err(|error| format!("failed to enumerate '{}': {error}", directory.display()))?;
-        entries.sort_by(|left, right| left.file_name().cmp(&right.file_name()));
+        entries.sort_by_key(|entry| entry.file_name());
 
         for entry in entries {
             let path = entry.path();

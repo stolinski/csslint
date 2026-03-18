@@ -134,7 +134,10 @@ fn resolve_csslint_binary() -> PathBuf {
     } else {
         "csslint"
     };
-    let fallback_binary = workspace_root.join("target").join("debug").join(binary_name);
+    let fallback_binary = workspace_root
+        .join("target")
+        .join("debug")
+        .join(binary_name);
     if fallback_binary.exists() {
         return fallback_binary;
     }

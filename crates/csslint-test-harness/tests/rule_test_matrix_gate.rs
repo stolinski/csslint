@@ -33,7 +33,7 @@ article.card { color: blue; }
 
 #[test]
 fn required_rule_test_matrix_cells_are_green() {
-    let cases = vec![
+    let cases = [
         MatrixCase {
             context: MatrixContext::ImportedCss,
             path: "imported.css",

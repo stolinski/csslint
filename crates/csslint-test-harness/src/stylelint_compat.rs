@@ -222,9 +222,7 @@ pub fn run_stylelint_compat(mode: CompatMode) -> Result<CompatSummary, String> {
         }
 
         let severity = parse_severity(&fixture.level)?;
-        let rule_entry = rule_stats
-            .entry(fixture.csslint_rule.clone())
-            .or_insert_with(RuleAccumulator::default);
+        let rule_entry = rule_stats.entry(fixture.csslint_rule.clone()).or_default();
         rule_entry
             .stylelint_rules
             .insert(fixture.stylelint.rule.clone());
@@ -259,7 +257,7 @@ pub fn run_stylelint_compat(mode: CompatMode) -> Result<CompatSummary, String> {
 
             match execute_case(
                 &fixture,
-                &case,
+                case,
                 severity,
                 FileId::new(executed_cases as u32 + 6000),
             ) {
