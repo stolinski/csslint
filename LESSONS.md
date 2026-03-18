@@ -28,3 +28,4 @@
 - For `no_invalid_values`, low-noise behavior comes from validating only single-token high-confidence subsets and skipping dynamic/complex functions (`var`, `env`, `calc`, `min`, `max`, `clamp`, `attr`) by default.
 - For `no_global_leaks`, a conservative high-confidence policy is to flag only selectors that are entirely `:global(...)` in scoped contexts, while allowing mixed scoped+global selectors as intentional escapes.
 - Fix idempotency is most reliable when tested with multiple fixable rules in the same fixture across `.css`, `.vue`, and `.svelte`, since cross-rule edit ordering can hide second-pass regressions.
+- A stable rule-test matrix gate is easiest to enforce with one deterministic corpus per context (`imported.css`, native `.css`, `.vue`, `.svelte`) plus explicit per-rule report/no-report assertions.
