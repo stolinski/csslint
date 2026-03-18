@@ -89,6 +89,10 @@ Maintain `tests/compat/stylelint/skip-manifest.yaml` with fields:
 
 Skip entries should be explicit, reviewable, and counted in reports.
 
+Validate manifest integrity and reason-code counts with:
+
+- `python3 scripts/validate_stylelint_skip_manifest.py`
+
 ## Compatibility Metrics
 
 Track:

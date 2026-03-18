@@ -37,4 +37,8 @@ The commit SHA is intentionally fixed so fixture imports are reproducible.
    `node scripts/import_stylelint_fixtures.mjs --check`
 
 4. Review and update `skip-manifest.yaml` entries as needed.
+   Validate skip governance and reason counts:
+
+   `python3 scripts/validate_stylelint_skip_manifest.py`
+
 5. Re-run compatibility harness and ratchet checks before merging.

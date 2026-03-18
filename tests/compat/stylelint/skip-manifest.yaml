@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "skips": [
+    {
+      "stylelintRule": "block-no-empty",
+      "sourceFile": "lib/rules/block-no-empty/__tests__/index.mjs",
+      "caseId": "reject-scss-interpolation",
+      "reasonCode": "scss_less",
+      "note": "Requires SCSS syntax support, which is deferred for v1.",
+      "deferredBy": "D-001"
+    },
+    {
+      "stylelintRule": "declaration-block-no-duplicate-properties",
+      "sourceFile": "lib/rules/declaration-block-no-duplicate-properties/__tests__/index.mjs",
+      "caseId": "ignore-duplicate-values-with-stylelint-option",
+      "reasonCode": "unsupported_option",
+      "note": "Stylelint duplicate-property ignore options are outside the v1 subset.",
+      "deferredBy": "D-002"
+    },
+    {
+      "stylelintRule": "no-duplicate-selectors",
+      "sourceFile": "lib/rules/no-duplicate-selectors/__tests__/index.mjs",
+      "caseId": "respect-stylelint-disable-comment",
+      "reasonCode": "directive_comments",
+      "note": "stylelint-disable directives are deferred from core v1 behavior.",
+      "deferredBy": "D-003"
+    },
+    {
+      "stylelintRule": "property-no-unknown",
+      "sourceFile": "lib/rules/property-no-unknown/__tests__/index.mjs",
+      "caseId": "ignore-unknown-property-via-option",
+      "reasonCode": "unsupported_option",
+      "note": "ignoreProperties option is not part of the v1 compatibility subset.",
+      "deferredBy": "D-002"
+    },
+    {
+      "stylelintRule": "selector-no-qualifying-type",
+      "sourceFile": "lib/rules/selector-no-qualifying-type/__tests__/index.mjs",
+      "caseId": "reject-nested-selector-syntax",
+      "reasonCode": "custom_syntax",
+      "note": "Nested selector syntax requires custom syntax adapters outside v1.",
+      "deferredBy": "D-002"
+    },
+    {
+      "stylelintRule": "value-no-vendor-prefix",
+      "sourceFile": "lib/rules/value-no-vendor-prefix/__tests__/index.mjs",
+      "caseId": "reject-postcss-value-parser-integration-case",
+      "reasonCode": "postcss_integration",
+      "note": "PostCSS value parser integration cases are deferred in v1.",
+      "deferredBy": "D-005"
+    }
+  ]
+}
