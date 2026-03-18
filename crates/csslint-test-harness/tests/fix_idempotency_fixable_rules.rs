@@ -40,14 +40,16 @@ fn run_idempotency_case(path: &str, source: &str) {
         );
     }
 
-    let first_fixes = diagnostics_to_fixes(&fixable_first);
+    let first_fix_run = run_fix_engine(FileId::new(950), source, &fixable_first);
     assert!(
-        !first_fixes.is_empty(),
-        "{path} should produce fixable diagnostics in first pass"
+        first_fix_run.rejected == 0,
+        "{path} should not reject valid fixable proposals"
     );
-
-    let (fixed_source, applied_first) = csslint_fix::apply_fixes(source, &first_fixes);
-    assert!(applied_first > 0, "{path} should apply at least one fix");
+    assert!(
+        first_fix_run.applied > 0,
+        "{path} should apply at least one fix"
+    );
+    let fixed_source = first_fix_run.updated;
 
     let second_pass = lint_source(path, &fixed_source, FileId::new(951));
     let fixable_second = fixable_diagnostics(&second_pass);
@@ -56,12 +58,13 @@ fn run_idempotency_case(path: &str, source: &str) {
         "{path} should be clean for all fixable rules after first fix pass"
     );
 
-    let second_fixes = diagnostics_to_fixes(&fixable_second);
-    let (second_fixed_source, applied_second) =
-        csslint_fix::apply_fixes(&fixed_source, &second_fixes);
-    assert_eq!(applied_second, 0, "{path} second fix pass must be a no-op");
+    let second_fix_run = run_fix_engine(FileId::new(951), &fixed_source, &fixable_second);
     assert_eq!(
-        second_fixed_source, fixed_source,
+        second_fix_run.applied, 0,
+        "{path} second fix pass must be a no-op"
+    );
+    assert_eq!(
+        second_fix_run.updated, fixed_source,
         "{path} second pass should not change output"
     );
 }
@@ -88,9 +91,25 @@ fn fixable_diagnostics(diagnostics: &[Diagnostic]) -> Vec<Diagnostic> {
         .collect()
 }
 
-fn diagnostics_to_fixes(diagnostics: &[Diagnostic]) -> Vec<csslint_core::Fix> {
-    diagnostics
-        .iter()
-        .filter_map(|diagnostic| diagnostic.fix.clone())
-        .collect()
+struct FixRun {
+    updated: String,
+    applied: usize,
+    rejected: usize,
+}
+
+fn run_fix_engine(file_id: FileId, source: &str, diagnostics: &[Diagnostic]) -> FixRun {
+    let collection = csslint_fix::collect_fix_proposals_for_file(file_id, source, diagnostics);
+    let staged = collection
+        .staged_by_file
+        .get(&file_id)
+        .cloned()
+        .unwrap_or_default();
+    let (accepted, _dropped) = csslint_fix::resolve_file_overlaps(&staged);
+    let (updated, applied) = csslint_fix::apply_resolved_fixes(source, &accepted);
+
+    FixRun {
+        updated,
+        applied,
+        rejected: collection.rejected.len(),
+    }
 }

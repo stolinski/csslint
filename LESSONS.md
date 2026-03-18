@@ -33,3 +33,4 @@
 - Fix collection should stage proposals by `FileId` and validate span integrity (`start <= end`, in-bounds) up front so malformed fix hints are rejected without risking applier panics.
 - Overlap resolution stays repeatable when candidates are ranked globally by severity, then priority, then span length, then rule ID before conflict checks.
 - Descending byte-range application works best when paired with UTF-8 boundary checks; this keeps offset math stable and preserves untouched CRLF/newline bytes exactly.
+- Fix-engine idempotency tests should exercise the full pipeline (`collect_fix_proposals` -> `resolve_file_overlaps` -> `apply_resolved_fixes`) so validation and conflict behavior are covered, not just raw edit application.
