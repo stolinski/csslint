@@ -65,7 +65,8 @@ fn run_wave1_idempotency_case(path: &str, source: &str) {
     );
 
     let second_fixes = diagnostics_to_fixes(&wave1_second);
-    let (second_fixed_source, applied_second) = csslint_fix::apply_fixes(&fixed_source, &second_fixes);
+    let (second_fixed_source, applied_second) =
+        csslint_fix::apply_fixes(&fixed_source, &second_fixes);
     assert_eq!(applied_second, 0, "{path} second fix pass must be no-op");
     assert_eq!(
         second_fixed_source, fixed_source,

@@ -3,6 +3,8 @@
 use csslint_core::{Diagnostic, FileId, RuleId, Scope, Severity, Span};
 use csslint_extractor::ExtractedStyle;
 #[cfg(feature = "lightning")]
+use lightningcss::properties::PropertyId;
+#[cfg(feature = "lightning")]
 use lightningcss::stylesheet::{ParserOptions, StyleSheet};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -46,6 +48,56 @@ pub fn parse_style_with_options(
         scope: style.scope,
         parsed_with_lightning: true,
     })
+}
+
+pub fn is_known_property_name(property: &str) -> bool {
+    let canonical = property.trim();
+    if canonical.is_empty() || canonical.starts_with("--") {
+        return true;
+    }
+
+    #[cfg(feature = "lightning")]
+    {
+        !matches!(PropertyId::from(canonical), PropertyId::Custom(_))
+    }
+
+    #[cfg(not(feature = "lightning"))]
+    {
+        fallback_known_property_name(canonical)
+    }
+}
+
+#[cfg(not(feature = "lightning"))]
+fn fallback_known_property_name(property: &str) -> bool {
+    let lower = property.to_ascii_lowercase();
+    if lower.starts_with('-') {
+        return true;
+    }
+
+    matches!(
+        lower.as_str(),
+        "all"
+            | "animation"
+            | "background"
+            | "border"
+            | "color"
+            | "display"
+            | "flex"
+            | "font"
+            | "gap"
+            | "grid"
+            | "height"
+            | "inset"
+            | "margin"
+            | "opacity"
+            | "outline"
+            | "padding"
+            | "position"
+            | "text"
+            | "transform"
+            | "transition"
+            | "width"
+    )
 }
 
 #[cfg(feature = "lightning")]
@@ -136,7 +188,7 @@ mod tests {
 
     use csslint_core::FileId;
 
-    use crate::parse_style;
+    use crate::{is_known_property_name, parse_style};
 
     #[test]
     fn parser_accepts_valid_css() {
@@ -162,5 +214,12 @@ mod tests {
         assert_eq!(error.rule_id.as_str(), "parser_syntax_error");
         assert_eq!(error.severity.as_str(), "error");
         assert_eq!(error.span, extraction.styles[0].span());
+    }
+
+    #[test]
+    fn recognizes_known_and_unknown_property_names() {
+        assert!(is_known_property_name("color"));
+        assert!(is_known_property_name("--brand-color"));
+        assert!(!is_known_property_name("colr"));
     }
 }

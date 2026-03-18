@@ -24,3 +24,4 @@
 - Panic containment should disable only the failing rule instance for the current file and emit an internal error diagnostic, while other rules continue dispatching.
 - For SFC-safe fixes, declaration rewrites should use `semantic.span.start` to convert global spans back to local style slices before rebuilding replacement text.
 - Deferred plugin candidates (like `no_unused_scoped_selectors`) must stay outside the core config rule-ID allowlist so `.csslint` rejects them until plugin loading exists.
+- Keep `no_unknown_properties` cheap by annotating `DeclarationNode.property_known` during semantic build via `csslint_parser::is_known_property_name`; this preserves the parser-boundary contract while avoiding rule-time parser coupling.

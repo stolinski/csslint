@@ -73,6 +73,7 @@ pub struct DeclarationNode {
     pub id: DeclarationId,
     pub rule_id: RuleNodeId,
     pub property: String,
+    pub property_known: bool,
     pub value: String,
     pub span: Span,
 }
@@ -173,6 +174,7 @@ pub fn build_semantic_model(parsed: &ParsedStyle) -> CssSemanticModel {
                 id: declaration_id,
                 rule_id,
                 property: declaration.property.clone(),
+                property_known: csslint_parser::is_known_property_name(&declaration.property),
                 value: declaration.value,
                 span: global_span,
             };

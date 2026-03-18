@@ -274,6 +274,9 @@ pub fn core_registry() -> RuleRegistry {
     let _ = registry.register(NoEmptyRules);
     let _ = registry.register(NoDuplicateDeclarations);
     let _ = registry.register(NoLegacyVendorPrefixes);
+    let _ = registry.register(NoDuplicateSelectors);
+    let _ = registry.register(NoUnknownProperties);
+    let _ = registry.register(NoOverqualifiedSelectors);
 
     for meta in placeholder_rule_metas() {
         let _ = registry.register(PlaceholderRule { meta });
@@ -501,6 +504,9 @@ struct DeclarationSubscriber {
 struct NoEmptyRules;
 struct NoDuplicateDeclarations;
 struct NoLegacyVendorPrefixes;
+struct NoDuplicateSelectors;
+struct NoUnknownProperties;
+struct NoOverqualifiedSelectors;
 
 struct PlaceholderRule {
     meta: RuleMeta,
@@ -563,6 +569,63 @@ impl Rule for NoLegacyVendorPrefixes {
     }
 }
 
+impl Rule for NoDuplicateSelectors {
+    fn meta(&self) -> RuleMeta {
+        RuleMeta {
+            id: RuleId::from("no_duplicate_selectors"),
+            description: "Disallow duplicate selectors",
+            default_severity: Severity::Error,
+            fixable: false,
+        }
+    }
+
+    fn create(&self, _ctx: RuleContext<'_>) -> RuleVisitor {
+        RuleVisitor {
+            on_selector: Some(no_duplicate_selectors_on_selector),
+            on_declaration: None,
+            on_rule: None,
+        }
+    }
+}
+
+impl Rule for NoUnknownProperties {
+    fn meta(&self) -> RuleMeta {
+        RuleMeta {
+            id: RuleId::from("no_unknown_properties"),
+            description: "Disallow unknown CSS properties",
+            default_severity: Severity::Error,
+            fixable: false,
+        }
+    }
+
+    fn create(&self, _ctx: RuleContext<'_>) -> RuleVisitor {
+        RuleVisitor {
+            on_selector: None,
+            on_declaration: Some(no_unknown_properties_on_declaration),
+            on_rule: None,
+        }
+    }
+}
+
+impl Rule for NoOverqualifiedSelectors {
+    fn meta(&self) -> RuleMeta {
+        RuleMeta {
+            id: RuleId::from("no_overqualified_selectors"),
+            description: "Disallow overqualified selectors",
+            default_severity: Severity::Warn,
+            fixable: false,
+        }
+    }
+
+    fn create(&self, _ctx: RuleContext<'_>) -> RuleVisitor {
+        RuleVisitor {
+            on_selector: Some(no_overqualified_selectors_on_selector),
+            on_declaration: None,
+            on_rule: None,
+        }
+    }
+}
+
 impl Rule for PlaceholderRule {
     fn meta(&self) -> RuleMeta {
         self.meta.clone()
@@ -576,27 +639,9 @@ impl Rule for PlaceholderRule {
 fn placeholder_rule_metas() -> Vec<RuleMeta> {
     vec![
         RuleMeta {
-            id: RuleId::from("no_unknown_properties"),
-            description: "Disallow unknown CSS properties",
-            default_severity: Severity::Error,
-            fixable: false,
-        },
-        RuleMeta {
             id: RuleId::from("no_invalid_values"),
             description: "Disallow invalid declaration values",
             default_severity: Severity::Error,
-            fixable: false,
-        },
-        RuleMeta {
-            id: RuleId::from("no_duplicate_selectors"),
-            description: "Disallow duplicate selectors",
-            default_severity: Severity::Error,
-            fixable: false,
-        },
-        RuleMeta {
-            id: RuleId::from("no_overqualified_selectors"),
-            description: "Disallow overqualified selectors",
-            default_severity: Severity::Warn,
             fixable: false,
         },
         RuleMeta {
@@ -672,6 +717,61 @@ fn no_duplicate_declarations_on_rule(
                 rule_id: RuleId::from("no_duplicate_declarations"),
                 priority: 200,
             },
+        );
+    }
+}
+
+fn no_duplicate_selectors_on_selector(
+    semantic: &CssSemanticModel,
+    selector: &SelectorNode,
+    ctx: &mut RuleRuntimeCtx,
+) {
+    let Some(selector_ids) = semantic
+        .indexes
+        .selectors_by_normalized
+        .get(&selector.normalized)
+    else {
+        return;
+    };
+
+    if selector_ids.len() <= 1 {
+        return;
+    }
+
+    if selector_ids.first().copied() == Some(selector.id) {
+        return;
+    }
+
+    ctx.report(
+        format!("Duplicate selector '{}' detected", selector.normalized),
+        selector.span,
+    );
+}
+
+fn no_unknown_properties_on_declaration(
+    _semantic: &CssSemanticModel,
+    declaration: &DeclarationNode,
+    ctx: &mut RuleRuntimeCtx,
+) {
+    if declaration.property.starts_with("--") || declaration.property_known {
+        return;
+    }
+
+    ctx.report(
+        format!("Unknown property '{}' detected", declaration.property),
+        declaration.span,
+    );
+}
+
+fn no_overqualified_selectors_on_selector(
+    _semantic: &CssSemanticModel,
+    selector: &SelectorNode,
+    ctx: &mut RuleRuntimeCtx,
+) {
+    if selector_contains_overqualification(&selector.raw) {
+        ctx.report(
+            format!("Overqualified selector '{}' detected", selector.normalized),
+            selector.span,
         );
     }
 }
@@ -772,6 +872,185 @@ fn prefixed_value_variant(value: &str) -> Option<(&str, String)> {
     None
 }
 
+fn selector_contains_overqualification(selector: &str) -> bool {
+    let bytes = selector.as_bytes();
+    let mut segment_start = 0usize;
+    let mut index = 0usize;
+    let mut bracket_depth = 0usize;
+    let mut paren_depth = 0usize;
+    let mut quote: Option<u8> = None;
+
+    while index < bytes.len() {
+        let current = bytes[index];
+
+        if let Some(active_quote) = quote {
+            if current == active_quote {
+                quote = None;
+            }
+            index += 1;
+            continue;
+        }
+
+        match current {
+            b'"' | b'\'' => {
+                quote = Some(current);
+                index += 1;
+            }
+            b'[' => {
+                bracket_depth += 1;
+                index += 1;
+            }
+            b']' => {
+                bracket_depth = bracket_depth.saturating_sub(1);
+                index += 1;
+            }
+            b'(' => {
+                paren_depth += 1;
+                index += 1;
+            }
+            b')' => {
+                paren_depth = paren_depth.saturating_sub(1);
+                index += 1;
+            }
+            b'>' | b'+' | b'~' | b',' if bracket_depth == 0 && paren_depth == 0 => {
+                if compound_is_overqualified(selector.get(segment_start..index).unwrap_or("")) {
+                    return true;
+                }
+                segment_start = index + 1;
+                index += 1;
+            }
+            _ if current.is_ascii_whitespace() && bracket_depth == 0 && paren_depth == 0 => {
+                if compound_is_overqualified(selector.get(segment_start..index).unwrap_or("")) {
+                    return true;
+                }
+
+                index += 1;
+                while index < bytes.len() && bytes[index].is_ascii_whitespace() {
+                    index += 1;
+                }
+                segment_start = index;
+            }
+            _ => {
+                index += 1;
+            }
+        }
+    }
+
+    compound_is_overqualified(selector.get(segment_start..).unwrap_or(""))
+}
+
+fn compound_is_overqualified(compound: &str) -> bool {
+    let raw = compound.trim();
+    if raw.is_empty() {
+        return false;
+    }
+
+    let candidate = strip_global_wrapper(raw);
+    if candidate.is_empty() {
+        return false;
+    }
+
+    let bytes = candidate.as_bytes();
+    let mut index = 0usize;
+
+    if let Some(namespace_end) = bytes.iter().position(|byte| *byte == b'|') {
+        if namespace_end == 0 || is_ident_like_slice(&bytes[..namespace_end]) || bytes[0] == b'*' {
+            index = namespace_end + 1;
+        }
+    }
+
+    if index >= bytes.len() {
+        return false;
+    }
+
+    if bytes[index] == b'*' || !bytes[index].is_ascii_alphabetic() {
+        return false;
+    }
+
+    let tag_end = consume_ident(bytes, index);
+    if tag_end == index {
+        return false;
+    }
+
+    has_class_or_id_qualifier(&bytes[tag_end..])
+}
+
+fn strip_global_wrapper(compound: &str) -> &str {
+    let trimmed = compound.trim();
+    if let Some(rest) = trimmed.strip_prefix(":global(") {
+        if let Some(inner) = rest.strip_suffix(')') {
+            return inner.trim();
+        }
+    }
+
+    trimmed
+}
+
+fn is_ident_like_slice(input: &[u8]) -> bool {
+    !input.is_empty()
+        && input
+            .iter()
+            .all(|byte| byte.is_ascii_alphanumeric() || *byte == b'_' || *byte == b'-')
+}
+
+fn consume_ident(bytes: &[u8], start: usize) -> usize {
+    let mut index = start;
+    while index < bytes.len() {
+        let current = bytes[index];
+        if current.is_ascii_alphanumeric() || current == b'_' || current == b'-' {
+            index += 1;
+            continue;
+        }
+        break;
+    }
+    index
+}
+
+fn has_class_or_id_qualifier(tail: &[u8]) -> bool {
+    let mut index = 0usize;
+    let mut bracket_depth = 0usize;
+    let mut paren_depth = 0usize;
+    let mut quote: Option<u8> = None;
+
+    while index < tail.len() {
+        let current = tail[index];
+
+        if let Some(active_quote) = quote {
+            if current == active_quote {
+                quote = None;
+            }
+            index += 1;
+            continue;
+        }
+
+        match current {
+            b'"' | b'\'' => {
+                quote = Some(current);
+            }
+            b'[' => {
+                bracket_depth += 1;
+            }
+            b']' => {
+                bracket_depth = bracket_depth.saturating_sub(1);
+            }
+            b'(' => {
+                paren_depth += 1;
+            }
+            b')' => {
+                paren_depth = paren_depth.saturating_sub(1);
+            }
+            b'.' | b'#' if bracket_depth == 0 && paren_depth == 0 => {
+                return true;
+            }
+            _ => {}
+        }
+
+        index += 1;
+    }
+
+    false
+}
+
 const LEGACY_PREFIXES: [&str; 4] = ["-webkit-", "-moz-", "-ms-", "-o-"];
 
 #[cfg(test)]
@@ -862,6 +1141,245 @@ mod tests {
     }
 
     #[test]
+    fn no_duplicate_selectors_reports_second_and_later_occurrences() {
+        let mut indexes = SemanticIndexes::default();
+        indexes
+            .selectors_by_normalized
+            .insert(".btn".to_string(), vec![SelectorId(0), SelectorId(1)]);
+
+        let semantic = CssSemanticModel {
+            file_id: FileId::new(7),
+            span: Span::new(0, 40),
+            scope: Scope::Global,
+            source: ".btn { color: red; } .btn { color: blue; }".to_string(),
+            rules: vec![
+                RuleNode {
+                    id: RuleNodeId(0),
+                    selector_ids: vec![SelectorId(0)],
+                    declaration_ids: vec![DeclarationId(0)],
+                    span: Span::new(0, 20),
+                    is_at_rule: false,
+                },
+                RuleNode {
+                    id: RuleNodeId(1),
+                    selector_ids: vec![SelectorId(1)],
+                    declaration_ids: vec![DeclarationId(1)],
+                    span: Span::new(20, 40),
+                    is_at_rule: false,
+                },
+            ],
+            selectors: vec![
+                SelectorNode {
+                    id: SelectorId(0),
+                    rule_id: RuleNodeId(0),
+                    raw: ".btn".to_string(),
+                    normalized: ".btn".to_string(),
+                    parts: vec![SelectorPart {
+                        value: ".btn".to_string(),
+                        kind: SelectorPartKind::Class,
+                        scope: Scope::Global,
+                    }],
+                    span: Span::new(0, 4),
+                },
+                SelectorNode {
+                    id: SelectorId(1),
+                    rule_id: RuleNodeId(1),
+                    raw: ".btn".to_string(),
+                    normalized: ".btn".to_string(),
+                    parts: vec![SelectorPart {
+                        value: ".btn".to_string(),
+                        kind: SelectorPartKind::Class,
+                        scope: Scope::Global,
+                    }],
+                    span: Span::new(20, 24),
+                },
+            ],
+            declarations: vec![
+                DeclarationNode {
+                    id: DeclarationId(0),
+                    rule_id: RuleNodeId(0),
+                    property: "color".to_string(),
+                    property_known: true,
+                    value: "red".to_string(),
+                    span: Span::new(7, 18),
+                },
+                DeclarationNode {
+                    id: DeclarationId(1),
+                    rule_id: RuleNodeId(1),
+                    property: "color".to_string(),
+                    property_known: true,
+                    value: "blue".to_string(),
+                    span: Span::new(27, 39),
+                },
+            ],
+            at_rules: vec![],
+            indexes,
+        };
+
+        let diagnostics = run_rules(&semantic);
+        let duplicate_selector_diagnostics = diagnostics
+            .into_iter()
+            .filter(|diagnostic| diagnostic.rule_id.as_str() == "no_duplicate_selectors")
+            .collect::<Vec<_>>();
+
+        assert_eq!(duplicate_selector_diagnostics.len(), 1);
+        assert_eq!(duplicate_selector_diagnostics[0].span, Span::new(20, 24));
+        assert!(duplicate_selector_diagnostics[0]
+            .message
+            .contains("Duplicate selector"));
+    }
+
+    #[test]
+    fn no_unknown_properties_uses_semantic_property_metadata() {
+        let semantic = CssSemanticModel {
+            file_id: FileId::new(8),
+            span: Span::new(0, 28),
+            scope: Scope::Global,
+            source: ".box { colr: red; --brand: #fff; }".to_string(),
+            rules: vec![RuleNode {
+                id: RuleNodeId(0),
+                selector_ids: vec![],
+                declaration_ids: vec![DeclarationId(0), DeclarationId(1)],
+                span: Span::new(0, 28),
+                is_at_rule: false,
+            }],
+            selectors: vec![],
+            declarations: vec![
+                DeclarationNode {
+                    id: DeclarationId(0),
+                    rule_id: RuleNodeId(0),
+                    property: "colr".to_string(),
+                    property_known: false,
+                    value: "red".to_string(),
+                    span: Span::new(7, 17),
+                },
+                DeclarationNode {
+                    id: DeclarationId(1),
+                    rule_id: RuleNodeId(0),
+                    property: "--brand".to_string(),
+                    property_known: false,
+                    value: "#fff".to_string(),
+                    span: Span::new(18, 32),
+                },
+            ],
+            at_rules: vec![],
+            indexes: SemanticIndexes::default(),
+        };
+
+        let diagnostics = run_rules(&semantic);
+        let unknown_property_diagnostics = diagnostics
+            .into_iter()
+            .filter(|diagnostic| diagnostic.rule_id.as_str() == "no_unknown_properties")
+            .collect::<Vec<_>>();
+
+        assert_eq!(unknown_property_diagnostics.len(), 1);
+        assert!(unknown_property_diagnostics[0]
+            .message
+            .contains("Unknown property 'colr'"));
+    }
+
+    #[test]
+    fn no_overqualified_selectors_reports_type_plus_class_or_id() {
+        let semantic = CssSemanticModel {
+            file_id: FileId::new(9),
+            span: Span::new(0, 72),
+            scope: Scope::Global,
+            source: "article.card { color: red; } .card { color: red; } :global(button#cta) { color: red; }"
+                .to_string(),
+            rules: vec![
+                RuleNode {
+                    id: RuleNodeId(0),
+                    selector_ids: vec![SelectorId(0)],
+                    declaration_ids: vec![DeclarationId(0)],
+                    span: Span::new(0, 28),
+                    is_at_rule: false,
+                },
+                RuleNode {
+                    id: RuleNodeId(1),
+                    selector_ids: vec![SelectorId(1)],
+                    declaration_ids: vec![DeclarationId(1)],
+                    span: Span::new(29, 53),
+                    is_at_rule: false,
+                },
+                RuleNode {
+                    id: RuleNodeId(2),
+                    selector_ids: vec![SelectorId(2)],
+                    declaration_ids: vec![DeclarationId(2)],
+                    span: Span::new(54, 90),
+                    is_at_rule: false,
+                },
+            ],
+            selectors: vec![
+                SelectorNode {
+                    id: SelectorId(0),
+                    rule_id: RuleNodeId(0),
+                    raw: "article.card".to_string(),
+                    normalized: "article.card".to_string(),
+                    parts: vec![],
+                    span: Span::new(0, 12),
+                },
+                SelectorNode {
+                    id: SelectorId(1),
+                    rule_id: RuleNodeId(1),
+                    raw: ".card".to_string(),
+                    normalized: ".card".to_string(),
+                    parts: vec![],
+                    span: Span::new(29, 34),
+                },
+                SelectorNode {
+                    id: SelectorId(2),
+                    rule_id: RuleNodeId(2),
+                    raw: ":global(button#cta)".to_string(),
+                    normalized: ":global(button#cta)".to_string(),
+                    parts: vec![],
+                    span: Span::new(54, 73),
+                },
+            ],
+            declarations: vec![
+                DeclarationNode {
+                    id: DeclarationId(0),
+                    rule_id: RuleNodeId(0),
+                    property: "color".to_string(),
+                    property_known: true,
+                    value: "red".to_string(),
+                    span: Span::new(14, 25),
+                },
+                DeclarationNode {
+                    id: DeclarationId(1),
+                    rule_id: RuleNodeId(1),
+                    property: "color".to_string(),
+                    property_known: true,
+                    value: "red".to_string(),
+                    span: Span::new(36, 47),
+                },
+                DeclarationNode {
+                    id: DeclarationId(2),
+                    rule_id: RuleNodeId(2),
+                    property: "color".to_string(),
+                    property_known: true,
+                    value: "red".to_string(),
+                    span: Span::new(75, 86),
+                },
+            ],
+            at_rules: vec![],
+            indexes: SemanticIndexes::default(),
+        };
+
+        let diagnostics = run_rules(&semantic);
+        let overqualified_selector_diagnostics = diagnostics
+            .into_iter()
+            .filter(|diagnostic| diagnostic.rule_id.as_str() == "no_overqualified_selectors")
+            .collect::<Vec<_>>();
+
+        assert_eq!(overqualified_selector_diagnostics.len(), 2);
+        assert_eq!(overqualified_selector_diagnostics[0].span, Span::new(0, 12));
+        assert_eq!(
+            overqualified_selector_diagnostics[1].span,
+            Span::new(54, 73)
+        );
+    }
+
+    #[test]
     fn engine_dispatches_each_event_type_once_per_node() {
         let semantic = CssSemanticModel {
             file_id: FileId::new(2),
@@ -906,6 +1424,7 @@ mod tests {
                     id: DeclarationId(0),
                     rule_id: RuleNodeId(0),
                     property: "color".to_string(),
+                    property_known: true,
                     value: "red".to_string(),
                     span: Span::new(8, 17),
                 },
@@ -913,6 +1432,7 @@ mod tests {
                     id: DeclarationId(1),
                     rule_id: RuleNodeId(0),
                     property: "margin".to_string(),
+                    property_known: true,
                     value: "0".to_string(),
                     span: Span::new(18, 26),
                 },
