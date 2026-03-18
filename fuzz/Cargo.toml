@@ -1,0 +1,36 @@
+[package]
+name = "csslint-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+csslint-core = { path = "../crates/csslint-core" }
+csslint-extractor = { path = "../crates/csslint-extractor" }
+csslint-parser = { path = "../crates/csslint-parser" }
+csslint-semantic = { path = "../crates/csslint-semantic" }
+
+[[bin]]
+name = "extractor"
+path = "fuzz_targets/extractor.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "parser_wrapper"
+path = "fuzz_targets/parser_wrapper.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "semantic_builder"
+path = "fuzz_targets/semantic_builder.rs"
+test = false
+doc = false
+bench = false

@@ -47,3 +47,4 @@
 - Framework-native rule regressions are easiest to catch with fixture-level expected counts for `no_global_leaks`, `no_duplicate_selectors`, and `no_overqualified_selectors` across Vue scoped/module/plain and Svelte default-scoped contexts.
 - Component fix safety is easiest to verify by normalizing style contents out of the source and asserting the remaining template/script regions are byte-identical before and after `--fix`, then rerunning fixes to enforce second-pass no-op idempotency.
 - Perf budget gates are most reliable when CI always emits raw corpus runs (`perf-corpus-summary.json`, `stylelint-summary.json`) before enforcing the 20% runtime/memory budget check against a checked-in baseline with an explicit override rationale path.
+- Test-harness fixture paths should anchor from `env!("CARGO_MANIFEST_DIR")` (then walk to workspace `tests/`) so reliability suites work the same under package-scoped and workspace-scoped `cargo test` invocations.
