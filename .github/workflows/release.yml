@@ -32,7 +32,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@master
@@ -69,7 +69,7 @@ jobs:
           "$hash  ${{ matrix.archive_name }}" | Out-File -Encoding ascii "${{ matrix.archive_name }}.sha256"
 
       - name: Upload release artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: ${{ matrix.artifact_name }}
           path: |
@@ -84,7 +84,7 @@ jobs:
 
     steps:
       - name: Download all build artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           path: dist
 

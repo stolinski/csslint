@@ -51,7 +51,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@master
@@ -65,7 +65,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@master
@@ -87,7 +87,7 @@ jobs:
     needs: [check]
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@master
@@ -106,7 +106,7 @@ jobs:
         os: [macos-latest, windows-latest]
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@master
@@ -127,7 +127,7 @@ jobs:
     needs: [check]
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@master
@@ -142,7 +142,7 @@ jobs:
     needs: [check]
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@master
@@ -157,7 +157,7 @@ jobs:
     needs: [check]
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@master
@@ -172,7 +172,7 @@ jobs:
     needs: [check]
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@master
@@ -188,7 +188,7 @@ jobs:
     if: github.event_name == 'pull_request'
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@master
@@ -205,7 +205,7 @@ jobs:
         run: cargo run -p csslint-test-harness --bin stylelint_compat_report -- --mode fast --output artifacts/compat/compat-fast-summary.json
 
       - name: Upload compat-fast artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: compat-fast-summary
           path: artifacts/compat/compat-fast-summary.json
@@ -216,7 +216,7 @@ jobs:
     if: github.event_name != 'pull_request'
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@master
@@ -233,7 +233,7 @@ jobs:
         run: cargo run -p csslint-test-harness --bin stylelint_compat_report -- --mode full --output artifacts/compat/compat-summary.json --baseline tests/compat/stylelint/baseline/compat-summary.json --enforce-ratchet
 
       - name: Upload compat-full artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: compat-summary
           path: artifacts/compat/compat-summary.json
@@ -242,7 +242,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -260,7 +260,7 @@ jobs:
     needs: [check]
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@master
@@ -299,7 +299,7 @@ jobs:
         run: python3 scripts/check_perf_regression.py --summary artifacts/perf/perf-summary.json --baseline tests/perf/baseline/perf-summary.json --runtime-budget-percent 20 --memory-budget-percent 20 --runtime-min-regression-ms 5 --memory-min-regression-bytes 1048576 --override-rationale "${{ github.event_name == 'pull_request' && github.event.pull_request.body || '' }}"
 
       - name: Upload perf artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: perf-summary
           path: |
