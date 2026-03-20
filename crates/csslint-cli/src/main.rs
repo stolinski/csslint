@@ -334,7 +334,7 @@ where
             }
             "-h" | "--help" => {
                 return Err(CliError::usage(
-                    "usage: csslint <path> [--config <path>] [--ignore-path <path>] [--targets <profile>] [--code-frame] [--profile] [--fix] [--format json|pretty]",
+                    "usage: csslint [path] [--config <path>] [--ignore-path <path>] [--targets <profile>] [--code-frame] [--profile] [--fix] [--format json|pretty]",
                 ));
             }
             _ if arg.starts_with('-') => {
@@ -351,11 +351,7 @@ where
         }
     }
 
-    let Some(target_path) = target_path else {
-        return Err(CliError::usage(
-            "missing path argument; usage: csslint <path> [--config <path>] [--ignore-path <path>] [--targets <profile>] [--code-frame] [--profile] [--fix] [--format json|pretty]",
-        ));
-    };
+    let target_path = target_path.unwrap_or_else(|| PathBuf::from("."));
 
     Ok(CliOptions {
         target_path,
@@ -1305,10 +1301,10 @@ mod tests {
     }
 
     #[test]
-    fn parse_cli_options_requires_path_argument() {
-        let error = parse_cli_options(["csslint".to_string()]).expect_err("path is required");
-        assert_eq!(error.kind, CliErrorKind::Usage);
-        assert!(error.message.contains("missing path argument"));
+    fn parse_cli_options_defaults_to_current_directory_without_path_argument() {
+        let parsed = parse_cli_options(["csslint".to_string()])
+            .expect("path should default to current directory");
+        assert_eq!(parsed.target_path, PathBuf::from("."));
     }
 
     #[test]

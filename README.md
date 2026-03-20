@@ -13,8 +13,10 @@ It is currently in active development toward a scoped v1.
 ## Current CLI
 
 ```bash
-csslint <path> [--config <path>] [--ignore-path <path>] [--targets <profile>] [--code-frame] [--profile] [--fix] [--format json|pretty]
+csslint [path] [--config <path>] [--ignore-path <path>] [--targets <profile>] [--code-frame] [--profile] [--fix] [--format json|pretty]
 ```
+
+If `path` is omitted, csslint defaults to `.`.
 
 Core v1 commands:
 
