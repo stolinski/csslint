@@ -28,9 +28,9 @@ Exit codes:
 - `1` lint errors found
 - `2` runtime/config/internal failure
 
-## Install (today)
+## Install
 
-From this repo clone:
+From this repo clone (works now):
 
 ```bash
 cargo install --path crates/csslint-cli --force
@@ -41,6 +41,23 @@ Or build locally and run from `target`:
 ```bash
 cargo build --release
 ./target/release/csslint --help
+```
+
+From GitHub Releases (after a tagged release):
+
+1. Open the repo's latest release page.
+2. Download the archive for your platform:
+   - `csslint-linux-x86_64.tar.gz`
+   - `csslint-macos-x86_64.tar.gz`
+   - `csslint-windows-x86_64.zip`
+3. Verify checksum with the matching `.sha256` file.
+4. Extract and place `csslint` (or `csslint.exe`) on your `PATH`.
+
+Quick try from extracted binary:
+
+```bash
+./csslint --help
+./csslint /path/to/repo --format json
 ```
 
 ## Quick Start
