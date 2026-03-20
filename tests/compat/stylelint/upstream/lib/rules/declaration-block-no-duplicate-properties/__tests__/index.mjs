@@ -8,6 +8,11 @@ testRule({
       fast: true
     },
     {
+      code: "a { /* stylelint-disable-line declaration-block-no-duplicate-properties */ color: red; color: red; }",
+      description: "respect stylelint disable-line comment",
+      fast: true
+    },
+    {
       code: "a { color: red; color: blue; }",
       description: "ignore duplicate values with stylelint option",
       message: "Unexpected duplicate declaration",

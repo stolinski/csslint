@@ -6,6 +6,11 @@ testRule({
       code: "a { display: flex; }",
       description: "accept unprefixed value",
       fast: true
+    },
+    {
+      code: "/* stylelint-disable value-no-vendor-prefix */\na { display: -webkit-flex; }\n/* stylelint-enable value-no-vendor-prefix */",
+      description: "respect stylelint disable block comment",
+      fast: true
     }
   ],
   reject: [

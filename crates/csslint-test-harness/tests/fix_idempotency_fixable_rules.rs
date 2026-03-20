@@ -27,6 +27,35 @@ fn fixable_rules_are_idempotent_across_css_vue_and_svelte() {
     );
 }
 
+#[test]
+fn fixable_suite_unsupported_style_language_is_visible_and_not_fixable() {
+    let source = "<template><div class=\"box\"></div></template>\n<style lang=\"scss\">\n.empty {}\n.box { color: red; color: red; -webkit-transform: rotate(0); display: -webkit-flex; margin-left: 1rem; }\n</style>\n";
+    let diagnostics = lint_source("Fixture.vue", source, FileId::new(952));
+    let fixable = fixable_diagnostics(&diagnostics);
+
+    assert!(
+        fixable.is_empty(),
+        "unsupported lang blocks should not be classified as fixable rule diagnostics"
+    );
+    assert!(
+        diagnostics.iter().any(|diagnostic| diagnostic
+            .message
+            .to_ascii_lowercase()
+            .contains("unsupported")),
+        "unsupported lang should be emitted as extractor diagnostics"
+    );
+
+    let run = run_fix_engine(FileId::new(952), source, &fixable);
+    assert_eq!(
+        run.applied, 0,
+        "no fixes should apply on unsupported lang blocks"
+    );
+    assert_eq!(
+        run.rejected, 0,
+        "no fix proposals should be rejected when none exist"
+    );
+}
+
 fn run_idempotency_case(path: &str, source: &str) {
     let first_pass = lint_source(path, source, FileId::new(950));
     let fixable_first = fixable_diagnostics(&first_pass);
@@ -39,6 +68,12 @@ fn run_idempotency_case(path: &str, source: &str) {
             "{path} should report {rule} in first pass"
         );
     }
+    assert!(
+        fixable_first
+            .iter()
+            .all(|diagnostic| diagnostic.fix.is_some()),
+        "{path} fixable diagnostics should all include fix proposals"
+    );
 
     let first_fix_run = run_fix_engine(FileId::new(950), source, &fixable_first);
     assert!(
@@ -67,6 +102,10 @@ fn run_idempotency_case(path: &str, source: &str) {
         second_fix_run.updated, fixed_source,
         "{path} second pass should not change output"
     );
+    assert_eq!(
+        second_fix_run.rejected, 0,
+        "{path} second pass should not reject any proposals"
+    );
 }
 
 fn lint_source(path: &str, source: &str, file_id: FileId) -> Vec<Diagnostic> {
@@ -74,9 +113,12 @@ fn lint_source(path: &str, source: &str, file_id: FileId) -> Vec<Diagnostic> {
     let mut diagnostics = extraction.diagnostics;
 
     for style in extraction.styles {
-        if let Ok(parsed) = csslint_parser::parse_style(&style) {
-            let semantic = csslint_semantic::build_semantic_model(&parsed);
-            diagnostics.extend(csslint_rules::run_rules(&semantic));
+        match csslint_parser::parse_style(&style) {
+            Ok(parsed) => {
+                let semantic = csslint_semantic::build_semantic_model(&parsed);
+                diagnostics.extend(csslint_rules::run_rules(&semantic));
+            }
+            Err(diagnostic) => diagnostics.push(*diagnostic),
         }
     }
 

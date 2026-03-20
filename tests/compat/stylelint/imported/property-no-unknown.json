@@ -41,7 +41,7 @@
       "source": {
         "description": "ignore unknown property via option",
         "testRuleIndex": 0,
-        "caseIndex": 1
+        "caseIndex": 2
       },
       "skip": {
         "reasonCode": "unsupported_option",
@@ -68,6 +68,21 @@
         "description": "reject unknown property",
         "testRuleIndex": 0,
         "caseIndex": 0
+      }
+    },
+    {
+      "id": "respect-stylelint-disable-next-line-comment",
+      "kind": "accept",
+      "fast": true,
+      "input": "/* stylelint-disable-next-line property-no-unknown */\na { colr: red; }",
+      "expected": {
+        "diagnostics": [],
+        "fixed": null
+      },
+      "source": {
+        "description": "respect stylelint disable-next-line comment",
+        "testRuleIndex": 0,
+        "caseIndex": 1
       }
     }
   ]

@@ -1,2 +1,22 @@
 /target/
 /artifacts/
+
+# Python virtual environments
+/.venv/
+/.venv-ci/
+/venv/
+
+# Environment and local secrets
+.env
+.env.*
+!.env.example
+
+# Logs and temporary files
+*.log
+*.tmp
+*.temp
+
+# macOS / editor noise
+.DS_Store
+.idea/
+.vscode/

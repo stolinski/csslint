@@ -25,6 +25,7 @@ async function main() {
     const payload = {
       schemaVersion: 1,
       tool: 'stylelint',
+      executionModel: 'single-process-per-corpus-iteration',
       stylelintVersion: process.env.STYLELINT_VERSION || DEFAULT_STYLELINT_VERSION,
       protocol: {
         coldIterations: args.coldIterations,
@@ -81,39 +82,33 @@ async function runCorpus(corpus, args, configPath) {
 }
 
 function runIteration(sources, configPath) {
-  const perFileMs = [];
+  const filePaths = sources.map((entry) => entry.filePath);
   const startedAt = process.hrtime.bigint();
   let peakRss = process.memoryUsage().rss;
-
-  for (const entry of sources) {
-    const fileStarted = process.hrtime.bigint();
-    lintOne(entry.filePath, configPath);
-    const fileEnded = process.hrtime.bigint();
-    perFileMs.push(nanosToMillis(fileEnded - fileStarted));
-    peakRss = Math.max(peakRss, process.memoryUsage().rss);
-  }
+  lintBatch(filePaths, configPath);
+  peakRss = Math.max(peakRss, process.memoryUsage().rss);
 
   const endedAt = process.hrtime.bigint();
   const totalMs = nanosToMillis(endedAt - startedAt);
   const totalSeconds = totalMs / 1000;
   const totalBytes = sources.reduce((sum, entry) => sum + Buffer.byteLength(entry.source), 0);
+  const averageFileMs = sources.length > 0 ? totalMs / sources.length : 0;
 
-  perFileMs.sort((left, right) => left - right);
   return {
     totalMs,
     filesPerSecond: totalSeconds > 0 ? sources.length / totalSeconds : 0,
     mbPerSecond: totalSeconds > 0 ? (totalBytes / (1024 * 1024)) / totalSeconds : 0,
-    p50FileMs: percentile(perFileMs, 0.5),
-    p95FileMs: percentile(perFileMs, 0.95),
+    p50FileMs: averageFileMs,
+    p95FileMs: averageFileMs,
     peakRssBytes: peakRss,
   };
 }
 
-function lintOne(filePath, configPath) {
+function lintBatch(filePaths, configPath) {
   const result = spawnSync(
     'stylelint',
     [
-      filePath,
+      ...filePaths,
       '--custom-syntax',
       'postcss-html',
       '--config',
@@ -126,13 +121,11 @@ function lintOne(filePath, configPath) {
   );
 
   if (result.error) {
-    throw new Error(`failed to execute stylelint for '${filePath}': ${result.error.message}`);
+    throw new Error(`failed to execute stylelint batch run: ${result.error.message}`);
   }
 
   if (result.status !== 0 && result.status !== 2) {
-    throw new Error(
-      `stylelint runtime failure for '${filePath}': ${result.stderr || result.stdout}`
-    );
+    throw new Error(`stylelint runtime failure: ${result.stderr || result.stdout}`);
   }
 }
 
@@ -226,14 +219,6 @@ function digestSources(sources) {
     }
   }
   return hash.toString(16).padStart(16, '0');
-}
-
-function percentile(values, p) {
-  if (values.length === 0) {
-    return 0;
-  }
-  const rank = Math.min(values.length - 1, Math.round(Math.max(0, Math.min(1, p)) * (values.length - 1)));
-  return values[rank];
 }
 
 function nanosToMillis(value) {

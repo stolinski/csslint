@@ -7,6 +7,11 @@ testRule({
       fast: true
     },
     {
+      code: "/* stylelint-disable-next-line property-no-unknown */\na { colr: red; }",
+      description: "respect stylelint disable-next-line comment",
+      fast: true
+    },
+    {
       code: "a { colr: red; }",
       description: "ignore unknown property via option",
       message: "Unexpected unknown property",

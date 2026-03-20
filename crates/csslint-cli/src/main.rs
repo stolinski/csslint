@@ -1,9 +1,10 @@
 #![forbid(unsafe_code)]
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::env;
 use std::fmt;
 use std::fs;
+use std::io::IsTerminal;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
@@ -14,6 +15,7 @@ use csslint_fix::apply_fixes;
 use csslint_parser::{parse_style_with_options, CssParserOptions};
 use csslint_rules::{run_rules_profiled_with_config_and_targets, sort_diagnostics};
 use csslint_semantic::build_semantic_model;
+use ignore::gitignore::{Gitignore, GitignoreBuilder};
 use serde::Serialize;
 
 fn main() {
@@ -51,6 +53,7 @@ enum OutputFormat {
 struct CliOptions {
     target_path: PathBuf,
     config_path: Option<PathBuf>,
+    ignore_path: Option<PathBuf>,
     targets_override: Option<String>,
     code_frame: bool,
     profile: bool,
@@ -258,6 +261,7 @@ where
 
     let mut target_path: Option<PathBuf> = None;
     let mut config_path: Option<PathBuf> = None;
+    let mut ignore_path: Option<PathBuf> = None;
     let mut targets_override: Option<String> = None;
     let mut code_frame = false;
     let mut profile = false;
@@ -286,6 +290,18 @@ where
                     return Err(CliError::usage("--config may only be provided once"));
                 }
                 config_path = Some(PathBuf::from(value));
+            }
+            "--ignore-path" => {
+                let Some(value) = args.next() else {
+                    return Err(CliError::usage(
+                        "missing value for --ignore-path (expected path to .csslintignore file)",
+                    ));
+                };
+
+                if ignore_path.is_some() {
+                    return Err(CliError::usage("--ignore-path may only be provided once"));
+                }
+                ignore_path = Some(PathBuf::from(value));
             }
             "--format" => {
                 let Some(value) = args.next() else {
@@ -318,7 +334,7 @@ where
             }
             "-h" | "--help" => {
                 return Err(CliError::usage(
-                    "usage: csslint <path> [--config <path>] [--targets <profile>] [--code-frame] [--profile] [--fix] [--format json|pretty]",
+                    "usage: csslint <path> [--config <path>] [--ignore-path <path>] [--targets <profile>] [--code-frame] [--profile] [--fix] [--format json|pretty]",
                 ));
             }
             _ if arg.starts_with('-') => {
@@ -337,13 +353,14 @@ where
 
     let Some(target_path) = target_path else {
         return Err(CliError::usage(
-            "missing path argument; usage: csslint <path> [--config <path>] [--targets <profile>] [--code-frame] [--profile] [--fix] [--format json|pretty]",
+            "missing path argument; usage: csslint <path> [--config <path>] [--ignore-path <path>] [--targets <profile>] [--code-frame] [--profile] [--fix] [--format json|pretty]",
         ));
     };
 
     Ok(CliOptions {
         target_path,
         config_path,
+        ignore_path,
         targets_override,
         code_frame,
         profile,
@@ -362,12 +379,13 @@ fn run_lint(options: &CliOptions) -> Result<LintResult, CliError> {
         None => loaded_config.targets,
     };
 
-    let target_files = discover_target_files(&options.target_path).map_err(|error| {
-        CliError::runtime(format!(
-            "failed to discover lint targets under '{}': {error}",
-            options.target_path.display()
-        ))
-    })?;
+    let target_files = discover_target_files(&options.target_path, options.ignore_path.as_deref())
+        .map_err(|error| {
+            CliError::runtime(format!(
+                "failed to discover lint targets under '{}': {error}",
+                options.target_path.display()
+            ))
+        })?;
 
     let files_scanned = target_files.len();
     let mut file_indexes: BTreeMap<FileId, (PathBuf, LineIndex)> = BTreeMap::new();
@@ -442,6 +460,14 @@ fn run_lint(options: &CliOptions) -> Result<LintResult, CliError> {
             }
         }
 
+        if let Some((_, line_index)) = file_indexes.get(&file_id) {
+            let suppression_plan = build_inline_suppression_plan(&source);
+            diagnostics.retain(|diagnostic| {
+                diagnostic.file_id != file_id
+                    || !is_diagnostic_suppressed(diagnostic, line_index, &suppression_plan)
+            });
+        }
+
         if options.fix {
             let fix_started_at = Instant::now();
             let file_fixes = diagnostics
@@ -487,6 +513,309 @@ fn run_lint(options: &CliOptions) -> Result<LintResult, CliError> {
         file_profile,
         rule_profile,
     })
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SuppressionCommand {
+    Disable,
+    Enable,
+    DisableLine,
+    DisableNextLine,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct SuppressionDirective {
+    command: SuppressionCommand,
+    rule_ids: Vec<String>,
+    start_offset: usize,
+    end_offset: usize,
+    line: usize,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct OffsetRange {
+    start: usize,
+    end: usize,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+struct SuppressionPlan {
+    all_ranges: Vec<OffsetRange>,
+    rule_ranges: BTreeMap<String, Vec<OffsetRange>>,
+    line_all: BTreeSet<usize>,
+    line_by_rule: BTreeMap<String, BTreeSet<usize>>,
+}
+
+fn build_inline_suppression_plan(source: &str) -> SuppressionPlan {
+    let directives = collect_suppression_directives(source);
+    let mut plan = SuppressionPlan::default();
+
+    let mut disabled_all_depth = 0usize;
+    let mut disabled_all_start: Option<usize> = None;
+    let mut disabled_rule_states: BTreeMap<String, (usize, usize)> = BTreeMap::new();
+
+    for directive in directives {
+        match directive.command {
+            SuppressionCommand::Disable => {
+                if directive.rule_ids.is_empty() {
+                    if disabled_all_depth == 0 {
+                        disabled_all_start = Some(directive.end_offset);
+                    }
+                    disabled_all_depth = disabled_all_depth.saturating_add(1);
+                    continue;
+                }
+
+                for rule_id in directive.rule_ids {
+                    disabled_rule_states
+                        .entry(rule_id)
+                        .and_modify(|(depth, _)| *depth = depth.saturating_add(1))
+                        .or_insert((1, directive.end_offset));
+                }
+            }
+            SuppressionCommand::Enable => {
+                if directive.rule_ids.is_empty() {
+                    if disabled_all_depth > 0 {
+                        disabled_all_depth -= 1;
+                        if disabled_all_depth == 0 {
+                            if let Some(start) = disabled_all_start.take() {
+                                plan.all_ranges.push(OffsetRange {
+                                    start,
+                                    end: directive.start_offset,
+                                });
+                            }
+                        }
+                    }
+
+                    for (rule_id, (_, start)) in std::mem::take(&mut disabled_rule_states) {
+                        plan.rule_ranges
+                            .entry(rule_id)
+                            .or_default()
+                            .push(OffsetRange {
+                                start,
+                                end: directive.start_offset,
+                            });
+                    }
+                    continue;
+                }
+
+                for rule_id in directive.rule_ids {
+                    if let Some((depth, start)) = disabled_rule_states.get_mut(&rule_id) {
+                        if *depth > 1 {
+                            *depth -= 1;
+                            continue;
+                        }
+
+                        let start_offset = *start;
+                        disabled_rule_states.remove(&rule_id);
+                        plan.rule_ranges
+                            .entry(rule_id)
+                            .or_default()
+                            .push(OffsetRange {
+                                start: start_offset,
+                                end: directive.start_offset,
+                            });
+                    }
+                }
+            }
+            SuppressionCommand::DisableLine => {
+                register_line_suppression(&mut plan, directive.line, &directive.rule_ids);
+            }
+            SuppressionCommand::DisableNextLine => {
+                register_line_suppression(
+                    &mut plan,
+                    directive.line.saturating_add(1),
+                    &directive.rule_ids,
+                );
+            }
+        }
+    }
+
+    let source_end = source.len();
+    if let Some(start) = disabled_all_start {
+        plan.all_ranges.push(OffsetRange {
+            start,
+            end: source_end,
+        });
+    }
+    for (rule_id, (_, start)) in disabled_rule_states {
+        plan.rule_ranges
+            .entry(rule_id)
+            .or_default()
+            .push(OffsetRange {
+                start,
+                end: source_end,
+            });
+    }
+
+    plan
+}
+
+fn register_line_suppression(plan: &mut SuppressionPlan, line: usize, rule_ids: &[String]) {
+    if line == 0 {
+        return;
+    }
+
+    if rule_ids.is_empty() {
+        plan.line_all.insert(line);
+        return;
+    }
+
+    for rule_id in rule_ids {
+        plan.line_by_rule
+            .entry(rule_id.clone())
+            .or_default()
+            .insert(line);
+    }
+}
+
+fn collect_suppression_directives(source: &str) -> Vec<SuppressionDirective> {
+    let mut directives = Vec::new();
+    let line_index = LineIndex::new(source);
+    let bytes = source.as_bytes();
+    let mut cursor = 0usize;
+
+    while cursor + 1 < bytes.len() {
+        if bytes[cursor] != b'/' || bytes[cursor + 1] != b'*' {
+            cursor += 1;
+            continue;
+        }
+
+        let comment_start = cursor;
+        cursor += 2;
+        while cursor + 1 < bytes.len() && !(bytes[cursor] == b'*' && bytes[cursor + 1] == b'/') {
+            cursor += 1;
+        }
+
+        if cursor + 1 >= bytes.len() {
+            break;
+        }
+
+        let comment_end = cursor + 2;
+        let comment_body = source.get(comment_start + 2..cursor).unwrap_or("");
+        if let Some((command, rule_ids)) = parse_suppression_directive(comment_body) {
+            let (line, _) = line_index.offset_to_line_column(comment_start);
+            directives.push(SuppressionDirective {
+                command,
+                rule_ids,
+                start_offset: comment_start,
+                end_offset: comment_end,
+                line,
+            });
+        }
+
+        cursor = comment_end;
+    }
+
+    directives
+}
+
+fn parse_suppression_directive(comment_body: &str) -> Option<(SuppressionCommand, Vec<String>)> {
+    let normalized = normalize_comment_body(comment_body);
+    if normalized.is_empty() {
+        return None;
+    }
+
+    let mut parts = normalized.splitn(2, char::is_whitespace);
+    let command = parts.next()?.to_ascii_lowercase();
+    let rest = parts
+        .next()
+        .unwrap_or("")
+        .split("--")
+        .next()
+        .unwrap_or("")
+        .trim();
+
+    let suppression_command = match command.as_str() {
+        "csslint-disable" | "stylelint-disable" => SuppressionCommand::Disable,
+        "csslint-enable" | "stylelint-enable" => SuppressionCommand::Enable,
+        "csslint-disable-line" | "stylelint-disable-line" => SuppressionCommand::DisableLine,
+        "csslint-disable-next-line" | "stylelint-disable-next-line" => {
+            SuppressionCommand::DisableNextLine
+        }
+        _ => return None,
+    };
+
+    Some((suppression_command, parse_rule_ids(rest)))
+}
+
+fn normalize_comment_body(comment_body: &str) -> String {
+    comment_body
+        .lines()
+        .map(|line| line.trim())
+        .map(|line| line.strip_prefix('*').unwrap_or(line).trim())
+        .filter(|line| !line.is_empty())
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+fn parse_rule_ids(raw_rules: &str) -> Vec<String> {
+    if raw_rules.trim().is_empty() {
+        return Vec::new();
+    }
+
+    let mut rule_ids = raw_rules
+        .replace(',', " ")
+        .split_whitespace()
+        .map(canonicalize_suppression_rule_id)
+        .filter(|token| !token.is_empty())
+        .collect::<Vec<_>>();
+
+    if rule_ids.iter().any(|rule_id| rule_id == "all") {
+        return Vec::new();
+    }
+
+    rule_ids.sort();
+    rule_ids.dedup();
+    rule_ids
+}
+
+fn canonicalize_suppression_rule_id(token: &str) -> String {
+    let canonical = token.trim().to_ascii_lowercase().replace('-', "_");
+    match canonical.as_str() {
+        "block_no_empty" => "no_empty_rules".to_string(),
+        "declaration_block_no_duplicate_properties" => "no_duplicate_declarations".to_string(),
+        "declaration_property_value_no_unknown" => "no_invalid_values".to_string(),
+        "property_no_unknown" => "no_unknown_properties".to_string(),
+        "property_no_vendor_prefix" | "value_no_vendor_prefix" => {
+            "no_legacy_vendor_prefixes".to_string()
+        }
+        "selector_no_qualifying_type" => "no_overqualified_selectors".to_string(),
+        _ => canonical,
+    }
+}
+
+fn is_diagnostic_suppressed(
+    diagnostic: &Diagnostic,
+    line_index: &LineIndex,
+    plan: &SuppressionPlan,
+) -> bool {
+    let offset = diagnostic.span.start;
+    let (line, _) = line_index.offset_to_line_column(offset);
+    let rule_id = diagnostic.rule_id.as_str().to_ascii_lowercase();
+
+    if plan.line_all.contains(&line) {
+        return true;
+    }
+    if plan
+        .line_by_rule
+        .get(&rule_id)
+        .is_some_and(|lines| lines.contains(&line))
+    {
+        return true;
+    }
+
+    if offset_in_ranges(offset, &plan.all_ranges) {
+        return true;
+    }
+    plan.rule_ranges
+        .get(&rule_id)
+        .is_some_and(|ranges| offset_in_ranges(offset, ranges))
+}
+
+fn offset_in_ranges(offset: usize, ranges: &[OffsetRange]) -> bool {
+    ranges
+        .iter()
+        .any(|range| offset >= range.start && offset < range.end)
 }
 
 fn render_diagnostic(
@@ -541,8 +870,16 @@ fn print_result(result: &LintResult, format: OutputFormat, code_frame: bool, pro
 }
 
 fn print_pretty(result: &LintResult, code_frame: bool) {
-    let rendered = render_pretty(result, code_frame);
+    let rendered = if should_use_color_output() {
+        render_pretty_colored(result, code_frame)
+    } else {
+        render_pretty(result, code_frame)
+    };
     print!("{rendered}");
+}
+
+fn should_use_color_output() -> bool {
+    std::io::stdout().is_terminal() && env::var_os("NO_COLOR").is_none()
 }
 
 fn print_json(result: &LintResult) {
@@ -671,6 +1008,14 @@ fn render_json(result: &LintResult) -> Result<String, serde_json::Error> {
 }
 
 fn render_pretty(result: &LintResult, code_frame: bool) -> String {
+    render_pretty_internal(result, code_frame, false)
+}
+
+fn render_pretty_colored(result: &LintResult, code_frame: bool) -> String {
+    render_pretty_internal(result, code_frame, true)
+}
+
+fn render_pretty_internal(result: &LintResult, code_frame: bool, use_color: bool) -> String {
     let mut output = String::new();
     let mut current_file: Option<&str> = None;
 
@@ -684,11 +1029,12 @@ fn render_pretty(result: &LintResult, code_frame: bool) -> String {
             current_file = Some(diagnostic.file_path.as_str());
         }
 
+        let severity = format_pretty_severity(&diagnostic.severity, use_color);
         output.push_str(&format!(
-            "  {}:{}  {:<5}  {}  {}\n",
+            "  {}:{}  {}  {}  {}\n",
             diagnostic.span.start_line,
             diagnostic.span.start_column,
-            diagnostic.severity,
+            severity,
             diagnostic.rule_id,
             diagnostic.message
         ));
@@ -724,6 +1070,19 @@ fn render_pretty(result: &LintResult, code_frame: bool) -> String {
     output
 }
 
+fn format_pretty_severity(severity: &str, use_color: bool) -> String {
+    let label = format!("{severity:<5}");
+    if !use_color {
+        return label;
+    }
+
+    match severity {
+        "error" => format!("\x1b[31m{label}\x1b[0m"),
+        "warn" => format!("\x1b[33m{label}\x1b[0m"),
+        _ => label,
+    }
+}
+
 fn render_code_frame(source: &str, diagnostic: &RenderedDiagnostic) -> Option<String> {
     let line_number = diagnostic.span.start_line;
     let line_text = source
@@ -756,7 +1115,10 @@ fn render_code_frame(source: &str, diagnostic: &RenderedDiagnostic) -> Option<St
     ))
 }
 
-fn discover_target_files(target: &Path) -> std::io::Result<Vec<PathBuf>> {
+fn discover_target_files(
+    target: &Path,
+    explicit_ignore_path: Option<&Path>,
+) -> std::io::Result<Vec<PathBuf>> {
     if !target.exists() {
         return Err(std::io::Error::new(
             std::io::ErrorKind::NotFound,
@@ -770,6 +1132,8 @@ fn discover_target_files(target: &Path) -> std::io::Result<Vec<PathBuf>> {
         }
         return Ok(Vec::new());
     }
+
+    let ignore_matcher = resolve_ignore_matcher(target, explicit_ignore_path)?;
 
     let mut files = Vec::new();
     let mut pending = vec![target.to_path_buf()];
@@ -790,11 +1154,17 @@ fn discover_target_files(target: &Path) -> std::io::Result<Vec<PathBuf>> {
                 if should_ignore_directory(&name) {
                     continue;
                 }
+                if is_ignored_by_matcher(ignore_matcher.as_ref(), &path, true) {
+                    continue;
+                }
                 pending.push(path);
                 continue;
             }
 
-            if file_type.is_file() && is_supported_lint_file(&path) {
+            if file_type.is_file()
+                && !is_ignored_by_matcher(ignore_matcher.as_ref(), &path, false)
+                && is_supported_lint_file(&path)
+            {
                 files.push(path);
             }
         }
@@ -802,6 +1172,79 @@ fn discover_target_files(target: &Path) -> std::io::Result<Vec<PathBuf>> {
 
     files.sort_by(|left, right| left.to_string_lossy().cmp(&right.to_string_lossy()));
     Ok(files)
+}
+
+fn resolve_ignore_matcher(
+    target: &Path,
+    explicit_ignore_path: Option<&Path>,
+) -> std::io::Result<Option<Gitignore>> {
+    let ignore_path = match explicit_ignore_path {
+        Some(path) => Some(path.to_path_buf()),
+        None => discover_ignore_file(target),
+    };
+
+    let Some(ignore_path) = ignore_path else {
+        return Ok(None);
+    };
+
+    if !ignore_path.exists() {
+        if explicit_ignore_path.is_some() {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                format!("ignore file '{}' does not exist", ignore_path.display()),
+            ));
+        }
+        return Ok(None);
+    }
+
+    if !ignore_path.is_file() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            format!("ignore path '{}' is not a file", ignore_path.display()),
+        ));
+    }
+
+    let root = if target.is_dir() {
+        target
+    } else {
+        target.parent().unwrap_or_else(|| Path::new("."))
+    };
+    let mut builder = GitignoreBuilder::new(root);
+    builder.add(ignore_path);
+
+    builder
+        .build()
+        .map(Some)
+        .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidData, error.to_string()))
+}
+
+fn discover_ignore_file(target: &Path) -> Option<PathBuf> {
+    let mut cursor = if target.is_dir() {
+        Some(target)
+    } else {
+        target.parent()
+    };
+
+    while let Some(directory) = cursor {
+        let candidate = directory.join(".csslintignore");
+        if candidate.is_file() {
+            return Some(candidate);
+        }
+
+        cursor = directory.parent();
+    }
+
+    None
+}
+
+fn is_ignored_by_matcher(matcher: Option<&Gitignore>, path: &Path, is_dir: bool) -> bool {
+    matcher
+        .map(|gitignore| {
+            gitignore
+                .matched_path_or_any_parents(path, is_dir)
+                .is_ignore()
+        })
+        .unwrap_or(false)
 }
 
 fn is_supported_lint_file(path: &Path) -> bool {
@@ -812,10 +1255,11 @@ fn is_supported_lint_file(path: &Path) -> bool {
 }
 
 fn should_ignore_directory(name: &str) -> bool {
-    matches!(
-        name,
-        "node_modules" | "dist" | "build" | ".git" | ".hg" | ".svn"
-    )
+    if name.starts_with('.') {
+        return true;
+    }
+
+    matches!(name, "node_modules" | "dist" | "build")
 }
 
 #[cfg(test)]
@@ -825,8 +1269,11 @@ mod tests {
     use std::path::{Path, PathBuf};
     use std::time::{SystemTime, UNIX_EPOCH};
 
+    use csslint_core::{Diagnostic, FileId, LineIndex, RuleId, Severity, Span};
+
     use super::{
-        discover_target_files, parse_cli_options, render_json, render_pretty, CliErrorKind,
+        build_inline_suppression_plan, discover_target_files, is_diagnostic_suppressed,
+        parse_cli_options, render_json, render_pretty, render_pretty_colored, CliErrorKind,
         CliOptions, LintResult, OutputFormat, PhaseTiming, RenderedDiagnostic, RenderedFix,
         RenderedSpan,
     };
@@ -847,6 +1294,7 @@ mod tests {
             CliOptions {
                 target_path: PathBuf::from("src"),
                 config_path: None,
+                ignore_path: None,
                 targets_override: None,
                 code_frame: false,
                 profile: false,
@@ -904,6 +1352,22 @@ mod tests {
     }
 
     #[test]
+    fn parse_cli_options_accepts_ignore_path_override() {
+        let parsed = parse_cli_options([
+            "csslint".to_string(),
+            "src".to_string(),
+            "--ignore-path".to_string(),
+            "config/.csslintignore".to_string(),
+        ])
+        .expect("ignore-path override should parse");
+
+        assert_eq!(
+            parsed.ignore_path,
+            Some(PathBuf::from("config/.csslintignore"))
+        );
+    }
+
+    #[test]
     fn parse_cli_options_accepts_code_frame_flag() {
         let parsed = parse_cli_options([
             "csslint".to_string(),
@@ -954,6 +1418,49 @@ mod tests {
     }
 
     #[test]
+    fn parse_cli_options_requires_format_value() {
+        let error = parse_cli_options([
+            "csslint".to_string(),
+            "src".to_string(),
+            "--format".to_string(),
+        ])
+        .expect_err("--format without value should fail");
+
+        assert_eq!(error.kind, CliErrorKind::Usage);
+        assert!(error.message.contains("missing value for --format"));
+    }
+
+    #[test]
+    fn parse_cli_options_rejects_unsupported_format_value() {
+        let error = parse_cli_options([
+            "csslint".to_string(),
+            "src".to_string(),
+            "--format".to_string(),
+            "yaml".to_string(),
+        ])
+        .expect_err("unsupported format should fail");
+
+        assert_eq!(error.kind, CliErrorKind::Usage);
+        assert!(error.message.contains("unsupported format 'yaml'"));
+    }
+
+    #[test]
+    fn parse_cli_options_rejects_duplicate_config_flags() {
+        let error = parse_cli_options([
+            "csslint".to_string(),
+            "src".to_string(),
+            "--config".to_string(),
+            "a.json".to_string(),
+            "--config".to_string(),
+            "b.json".to_string(),
+        ])
+        .expect_err("duplicate --config should fail");
+
+        assert_eq!(error.kind, CliErrorKind::Usage);
+        assert!(error.message.contains("--config may only be provided once"));
+    }
+
+    #[test]
     fn discover_target_files_filters_supported_extensions_and_ignores_defaults() {
         let fixture = TempFixture::new("discovery-filter");
 
@@ -965,8 +1472,10 @@ mod tests {
         fixture.write("dist/generated.svelte", "<style>.x {}</style>");
         fixture.write("build/generated.vue", "<style>.x {}</style>");
         fixture.write(".git/config.css", "body {}");
+        fixture.write(".svelte-kit/generated.css", "body {}");
+        fixture.write(".cache/generated.css", "body {}");
 
-        let files = discover_target_files(fixture.path()).expect("discovery should succeed");
+        let files = discover_target_files(fixture.path(), None).expect("discovery should succeed");
         let relative = fixture.relative_paths(&files);
         assert_eq!(
             relative,
@@ -986,13 +1495,104 @@ mod tests {
         fixture.write("a.vue", "<style>.a {}</style>");
         fixture.write("nested/b.svelte", "<style>.b {}</style>");
 
-        let first = discover_target_files(fixture.path()).expect("first discovery should pass");
-        let second = discover_target_files(fixture.path()).expect("second discovery should pass");
+        let first =
+            discover_target_files(fixture.path(), None).expect("first discovery should pass");
+        let second =
+            discover_target_files(fixture.path(), None).expect("second discovery should pass");
 
         assert_eq!(
             fixture.relative_paths(&first),
             fixture.relative_paths(&second)
         );
+    }
+
+    #[test]
+    fn discover_target_files_honors_csslintignore_patterns() {
+        let fixture = TempFixture::new("discovery-csslintignore");
+
+        fixture.write(".csslintignore", "generated.css\nignored-dir/\n");
+        fixture.write("src/kept.css", ".ok {}\n");
+        fixture.write("src/generated.css", ".skip {}\n");
+        fixture.write("ignored-dir/component.svelte", "<style>.skip {}</style>");
+
+        let files =
+            discover_target_files(fixture.path(), None).expect("discovery should respect ignore");
+        assert_eq!(
+            fixture.relative_paths(&files),
+            vec!["src/kept.css".to_string()]
+        );
+    }
+
+    #[test]
+    fn discover_target_files_honors_explicit_ignore_path() {
+        let fixture = TempFixture::new("discovery-explicit-ignore");
+
+        fixture.write("src/keep.css", ".ok {}\n");
+        fixture.write("src/skip.css", ".skip {}\n");
+        fixture.write("config/custom.ignore", "src/skip.css\n");
+
+        let ignore_path = fixture.path().join("config/custom.ignore");
+        let files = discover_target_files(fixture.path(), Some(ignore_path.as_path()))
+            .expect("discovery should honor explicit ignore path");
+
+        assert_eq!(
+            fixture.relative_paths(&files),
+            vec!["src/keep.css".to_string()]
+        );
+    }
+
+    #[test]
+    fn inline_suppressions_support_block_and_line_controls() {
+        let source = r#"
+/* csslint-disable-next-line no_unknown_properties */
+.one { colr: red; }
+/* stylelint-disable-line no-unknown-properties */ .two { colr: blue; }
+/* csslint-disable no_unknown_properties */
+.three { colr: green; }
+/* csslint-enable no_unknown_properties */
+.four { colr: purple; }
+"#;
+
+        let mut diagnostics = source
+            .match_indices("colr")
+            .map(|(offset, _)| {
+                Diagnostic::new(
+                    RuleId::from("no_unknown_properties"),
+                    Severity::Error,
+                    "Unknown property",
+                    Span::new(offset, offset + 4),
+                    FileId::new(1),
+                )
+            })
+            .collect::<Vec<_>>();
+
+        let plan = build_inline_suppression_plan(source);
+        let line_index = LineIndex::new(source);
+        diagnostics.retain(|diagnostic| !is_diagnostic_suppressed(diagnostic, &line_index, &plan));
+
+        assert_eq!(diagnostics.len(), 1);
+        let (line, _) = line_index.offset_to_line_column(diagnostics[0].span.start);
+        assert_eq!(line, 8);
+    }
+
+    #[test]
+    fn inline_suppressions_map_stylelint_rule_ids_to_csslint_rule_ids() {
+        let source = "/* stylelint-disable-next-line block-no-empty */\na {}\n";
+        let offset = source.find("a {}").expect("fixture contains empty block");
+
+        let mut diagnostics = vec![Diagnostic::new(
+            RuleId::from("no_empty_rules"),
+            Severity::Error,
+            "Empty rule block detected",
+            Span::new(offset, offset + 4),
+            FileId::new(3),
+        )];
+
+        let plan = build_inline_suppression_plan(source);
+        let line_index = LineIndex::new(source);
+        diagnostics.retain(|diagnostic| !is_diagnostic_suppressed(diagnostic, &line_index, &plan));
+
+        assert!(diagnostics.is_empty());
     }
 
     #[test]
@@ -1043,6 +1643,67 @@ mod tests {
         assert!(first.contains("Summary:"));
         assert!(first.contains("^"));
         assert!(!without_frame.contains("^"));
+    }
+
+    #[test]
+    fn pretty_reporter_colors_warning_and_error_severities_when_enabled() {
+        let result = LintResult {
+            files_scanned: 1,
+            files_linted: 1,
+            fixes_applied: 0,
+            diagnostics: vec![
+                RenderedDiagnostic {
+                    file_path: "src/main.css".to_string(),
+                    rule_id: "no_empty_rules".to_string(),
+                    severity: "warn".to_string(),
+                    message: "Warning diagnostic".to_string(),
+                    span: RenderedSpan {
+                        start_offset: 0,
+                        end_offset: 1,
+                        start_line: 1,
+                        start_column: 1,
+                        end_line: 1,
+                        end_column: 2,
+                    },
+                    fix: RenderedFix {
+                        available: false,
+                        start_offset: None,
+                        end_offset: None,
+                        replacement: None,
+                    },
+                },
+                RenderedDiagnostic {
+                    file_path: "src/main.css".to_string(),
+                    rule_id: "no_unknown_properties".to_string(),
+                    severity: "error".to_string(),
+                    message: "Error diagnostic".to_string(),
+                    span: RenderedSpan {
+                        start_offset: 2,
+                        end_offset: 3,
+                        start_line: 2,
+                        start_column: 1,
+                        end_line: 2,
+                        end_column: 2,
+                    },
+                    fix: RenderedFix {
+                        available: false,
+                        start_offset: None,
+                        end_offset: None,
+                        replacement: None,
+                    },
+                },
+            ],
+            file_sources: BTreeMap::new(),
+            internal_errors: Vec::new(),
+            timing: PhaseTiming::default(),
+            duration_ms: 1,
+            file_profile: Vec::new(),
+            rule_profile: BTreeMap::new(),
+        };
+
+        let rendered = render_pretty_colored(&result, false);
+        assert!(rendered.contains("\x1b[33mwarn "));
+        assert!(rendered.contains("\x1b[31merror"));
     }
 
     #[test]

@@ -18,14 +18,6 @@
       "deferredBy": "D-002"
     },
     {
-      "stylelintRule": "no-duplicate-selectors",
-      "sourceFile": "lib/rules/no-duplicate-selectors/__tests__/index.mjs",
-      "caseId": "respect-stylelint-disable-comment",
-      "reasonCode": "directive_comments",
-      "note": "stylelint-disable directives are deferred from core v1 behavior.",
-      "deferredBy": "D-003"
-    },
-    {
       "stylelintRule": "property-no-unknown",
       "sourceFile": "lib/rules/property-no-unknown/__tests__/index.mjs",
       "caseId": "ignore-unknown-property-via-option",

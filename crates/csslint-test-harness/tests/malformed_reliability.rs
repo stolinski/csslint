@@ -10,6 +10,9 @@ fn malformed_corpus_does_not_panic_across_pipeline() {
     let files = collect_fixture_files(&root);
     assert!(!files.is_empty(), "malformed corpus should not be empty");
 
+    let mut total_style_blocks = 0usize;
+    let mut total_extraction_diagnostics = 0usize;
+
     for (index, file_path) in files.iter().enumerate() {
         let source = fs::read_to_string(file_path)
             .unwrap_or_else(|error| panic!("failed to read '{}': {error}", file_path.display()));
@@ -20,7 +23,10 @@ fn malformed_corpus_does_not_panic_across_pipeline() {
         })
         .unwrap_or_else(|_| panic!("extractor panicked for '{}'", file_path.display()));
 
+        total_extraction_diagnostics += extraction.diagnostics.len();
+
         for style in extraction.styles {
+            total_style_blocks += 1;
             let parsed = std::panic::catch_unwind(|| {
                 parse_style_with_options(
                     &style,
@@ -45,6 +51,11 @@ fn malformed_corpus_does_not_panic_across_pipeline() {
             }
         }
     }
+
+    assert!(
+        total_style_blocks > 0 || total_extraction_diagnostics > 0,
+        "malformed corpus should exercise either style parsing or extractor diagnostics"
+    );
 }
 
 fn fixture_root() -> PathBuf {

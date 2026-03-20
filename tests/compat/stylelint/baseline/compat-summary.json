@@ -6,11 +6,11 @@
     "commit": "5bd2d21e8a6b47f529314284d162e6dcb37ef681"
   },
   "totals": {
-    "totalCases": 23,
-    "executedCases": 17,
-    "passed": 17,
+    "totalCases": 30,
+    "executedCases": 25,
+    "passed": 25,
     "failed": 0,
-    "skipped": 6,
+    "skipped": 5,
     "fixableCases": 4,
     "fixPassed": 4,
     "fixFailed": 0,
@@ -23,9 +23,9 @@
       "stylelintRules": [
         "declaration-block-no-duplicate-properties"
       ],
-      "totalCases": 3,
-      "executedCases": 2,
-      "passed": 2,
+      "totalCases": 4,
+      "executedCases": 3,
+      "passed": 3,
       "failed": 0,
       "skipped": 1,
       "fixableCases": 1,
@@ -40,10 +40,10 @@
         "no-duplicate-selectors"
       ],
       "totalCases": 3,
-      "executedCases": 2,
-      "passed": 2,
+      "executedCases": 3,
+      "passed": 3,
       "failed": 0,
-      "skipped": 1,
+      "skipped": 0,
       "fixableCases": 0,
       "fixPassed": 0,
       "fixFailed": 0,
@@ -55,9 +55,9 @@
       "stylelintRules": [
         "block-no-empty"
       ],
-      "totalCases": 3,
-      "executedCases": 2,
-      "passed": 2,
+      "totalCases": 4,
+      "executedCases": 3,
+      "passed": 3,
       "failed": 0,
       "skipped": 1,
       "fixableCases": 1,
@@ -71,9 +71,9 @@
       "stylelintRules": [
         "declaration-property-value-no-unknown"
       ],
-      "totalCases": 3,
-      "executedCases": 3,
-      "passed": 3,
+      "totalCases": 4,
+      "executedCases": 4,
+      "passed": 4,
       "failed": 0,
       "skipped": 0,
       "fixableCases": 0,
@@ -88,9 +88,9 @@
         "property-no-vendor-prefix",
         "value-no-vendor-prefix"
       ],
-      "totalCases": 5,
-      "executedCases": 4,
-      "passed": 4,
+      "totalCases": 7,
+      "executedCases": 6,
+      "passed": 6,
       "failed": 0,
       "skipped": 1,
       "fixableCases": 2,
@@ -104,9 +104,9 @@
       "stylelintRules": [
         "selector-no-qualifying-type"
       ],
-      "totalCases": 3,
-      "executedCases": 2,
-      "passed": 2,
+      "totalCases": 4,
+      "executedCases": 3,
+      "passed": 3,
       "failed": 0,
       "skipped": 1,
       "fixableCases": 0,
@@ -120,9 +120,9 @@
       "stylelintRules": [
         "property-no-unknown"
       ],
-      "totalCases": 3,
-      "executedCases": 2,
-      "passed": 2,
+      "totalCases": 4,
+      "executedCases": 3,
+      "passed": 3,
       "failed": 0,
       "skipped": 1,
       "fixableCases": 0,
@@ -135,10 +135,6 @@
   "skipReasons": [
     {
       "reasonCode": "custom_syntax",
-      "count": 1
-    },
-    {
-      "reasonCode": "directive_comments",
       "count": 1
     },
     {

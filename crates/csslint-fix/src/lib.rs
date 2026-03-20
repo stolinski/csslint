@@ -539,6 +539,32 @@ mod tests {
     }
 
     #[test]
+    fn descending_applier_skips_invalid_and_out_of_bounds_spans() {
+        let source = "abcdef";
+        let mut reversed = staged_fix(
+            FileId::new(1),
+            Span::new(4, 2),
+            "reversed",
+            Severity::Warn,
+            1,
+        );
+        reversed.replacement = "X".to_string();
+
+        let mut out_of_bounds = staged_fix(
+            FileId::new(1),
+            Span::new(1, 999),
+            "out_of_bounds",
+            Severity::Warn,
+            1,
+        );
+        out_of_bounds.replacement = "Y".to_string();
+
+        let (updated, applied) = apply_resolved_fixes(source, &[reversed, out_of_bounds]);
+        assert_eq!(updated, source);
+        assert_eq!(applied, 0);
+    }
+
+    #[test]
     fn legacy_apply_fixes_path_resolves_overlaps_before_applying() {
         let source = "abcdef";
         let fixes = vec![

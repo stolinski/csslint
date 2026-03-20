@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use csslint_core::{Diagnostic, FileId};
+use csslint_core::{Diagnostic, FileId, Span};
 
 #[test]
 fn component_file_fixes_stay_inside_style_regions_and_are_idempotent() {
@@ -17,6 +17,7 @@ fn component_file_fixes_stay_inside_style_regions_and_are_idempotent() {
         let input_path = fixture_input_path(case_dir);
         let source = fs::read_to_string(&input_path)
             .unwrap_or_else(|error| panic!("failed to read {}: {error}", input_path.display()));
+        let style_spans = style_spans(&input_path, &source, FileId::new(600 + index as u32));
 
         let first_pass = lint_source(&input_path, &source, FileId::new(600 + index as u32));
         let first_fixable = fixable_diagnostics(&first_pass);
@@ -39,6 +40,7 @@ fn component_file_fixes_stay_inside_style_regions_and_are_idempotent() {
             "expected at least one applied fix for {}",
             case_dir.display()
         );
+        assert_all_fixes_within_style_spans(&first_fix_run.accepted, &style_spans, case_dir);
 
         let original_non_style = normalize_non_style_regions(&source);
         let fixed_non_style = normalize_non_style_regions(&first_fix_run.updated);
@@ -70,6 +72,12 @@ fn component_file_fixes_stay_inside_style_regions_and_are_idempotent() {
             second_fix_run.applied,
             0,
             "second fix pass must be a no-op for {}",
+            case_dir.display()
+        );
+        assert_eq!(
+            second_fix_run.rejected,
+            0,
+            "second fix pass must not reject proposals for {}",
             case_dir.display()
         );
         assert_eq!(
@@ -111,6 +119,7 @@ struct FixRun {
     updated: String,
     applied: usize,
     rejected: usize,
+    accepted: Vec<csslint_fix::StagedFix>,
 }
 
 fn run_fix_engine(file_id: FileId, source: &str, diagnostics: &[Diagnostic]) -> FixRun {
@@ -127,6 +136,41 @@ fn run_fix_engine(file_id: FileId, source: &str, diagnostics: &[Diagnostic]) -> 
         updated,
         applied,
         rejected: collection.rejected.len(),
+        accepted,
+    }
+}
+
+fn style_spans(path: &Path, source: &str, file_id: FileId) -> Vec<Span> {
+    let extraction = csslint_extractor::extract_styles(file_id, path, source);
+    assert!(
+        extraction.diagnostics.is_empty(),
+        "unexpected extraction diagnostics for {}",
+        path.display()
+    );
+
+    extraction
+        .styles
+        .into_iter()
+        .map(|style| Span::new(style.start_offset, style.end_offset))
+        .collect()
+}
+
+fn assert_all_fixes_within_style_spans(
+    fixes: &[csslint_fix::StagedFix],
+    style_spans: &[Span],
+    case_dir: &Path,
+) {
+    for fix in fixes {
+        let inside_style = style_spans
+            .iter()
+            .any(|span| fix.span.start >= span.start && fix.span.end <= span.end);
+        assert!(
+            inside_style,
+            "fix span {}..{} escapes extracted style regions for {}",
+            fix.span.start,
+            fix.span.end,
+            case_dir.display()
+        );
     }
 }
 

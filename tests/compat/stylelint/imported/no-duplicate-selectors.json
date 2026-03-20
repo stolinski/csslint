@@ -52,28 +52,17 @@
     },
     {
       "id": "respect-stylelint-disable-comment",
-      "kind": "reject",
+      "kind": "accept",
       "fast": false,
-      "input": "/* stylelint-disable-next-line no-duplicate-selectors */\na { color: red; }\na { color: blue; }",
+      "input": "/* stylelint-disable no-duplicate-selectors */\na { color: red; }\na { color: blue; }\n/* stylelint-enable no-duplicate-selectors */",
       "expected": {
-        "diagnostics": [
-          {
-            "severity": "error",
-            "messageContains": "Duplicate selector 'a'",
-            "line": 3,
-            "column": 1
-          }
-        ],
+        "diagnostics": [],
         "fixed": null
       },
       "source": {
         "description": "respect stylelint disable comment",
         "testRuleIndex": 0,
         "caseIndex": 1
-      },
-      "skip": {
-        "reasonCode": "directive_comments",
-        "note": "stylelint-disable directives are deferred from core v1 behavior."
       }
     }
   ]

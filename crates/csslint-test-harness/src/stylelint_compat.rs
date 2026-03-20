@@ -403,6 +403,37 @@ struct SkipEntry {
     reason_code: String,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SuppressionCommand {
+    Disable,
+    Enable,
+    DisableLine,
+    DisableNextLine,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct SuppressionDirective {
+    command: SuppressionCommand,
+    rule_ids: Vec<String>,
+    start_offset: usize,
+    end_offset: usize,
+    line: usize,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct OffsetRange {
+    start: usize,
+    end: usize,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+struct SuppressionPlan {
+    all_ranges: Vec<OffsetRange>,
+    rule_ranges: BTreeMap<String, Vec<OffsetRange>>,
+    line_all: BTreeSet<usize>,
+    line_by_rule: BTreeMap<String, BTreeSet<usize>>,
+}
+
 fn execute_case(
     fixture: &FixtureFile,
     case: &FixtureCase,
@@ -536,8 +567,285 @@ fn lint_case(
         );
     }
 
+    let suppression_plan = build_inline_suppression_plan(source);
+    let line_index = LineIndex::new(source);
+    diagnostics
+        .retain(|diagnostic| !is_diagnostic_suppressed(diagnostic, &line_index, &suppression_plan));
+
     csslint_rules::sort_diagnostics(&mut diagnostics);
     Ok(diagnostics)
+}
+
+fn build_inline_suppression_plan(source: &str) -> SuppressionPlan {
+    let directives = collect_suppression_directives(source);
+    let mut plan = SuppressionPlan::default();
+
+    let mut disabled_all_depth = 0usize;
+    let mut disabled_all_start: Option<usize> = None;
+    let mut disabled_rule_states: BTreeMap<String, (usize, usize)> = BTreeMap::new();
+
+    for directive in directives {
+        match directive.command {
+            SuppressionCommand::Disable => {
+                if directive.rule_ids.is_empty() {
+                    if disabled_all_depth == 0 {
+                        disabled_all_start = Some(directive.end_offset);
+                    }
+                    disabled_all_depth = disabled_all_depth.saturating_add(1);
+                    continue;
+                }
+
+                for rule_id in directive.rule_ids {
+                    disabled_rule_states
+                        .entry(rule_id)
+                        .and_modify(|(depth, _)| *depth = depth.saturating_add(1))
+                        .or_insert((1, directive.end_offset));
+                }
+            }
+            SuppressionCommand::Enable => {
+                if directive.rule_ids.is_empty() {
+                    if disabled_all_depth > 0 {
+                        disabled_all_depth -= 1;
+                        if disabled_all_depth == 0 {
+                            if let Some(start) = disabled_all_start.take() {
+                                plan.all_ranges.push(OffsetRange {
+                                    start,
+                                    end: directive.start_offset,
+                                });
+                            }
+                        }
+                    }
+
+                    for (rule_id, (_, start)) in std::mem::take(&mut disabled_rule_states) {
+                        plan.rule_ranges
+                            .entry(rule_id)
+                            .or_default()
+                            .push(OffsetRange {
+                                start,
+                                end: directive.start_offset,
+                            });
+                    }
+                    continue;
+                }
+
+                for rule_id in directive.rule_ids {
+                    if let Some((depth, start)) = disabled_rule_states.get_mut(&rule_id) {
+                        if *depth > 1 {
+                            *depth -= 1;
+                            continue;
+                        }
+
+                        let start_offset = *start;
+                        disabled_rule_states.remove(&rule_id);
+                        plan.rule_ranges
+                            .entry(rule_id)
+                            .or_default()
+                            .push(OffsetRange {
+                                start: start_offset,
+                                end: directive.start_offset,
+                            });
+                    }
+                }
+            }
+            SuppressionCommand::DisableLine => {
+                register_line_suppression(&mut plan, directive.line, &directive.rule_ids);
+            }
+            SuppressionCommand::DisableNextLine => {
+                register_line_suppression(
+                    &mut plan,
+                    directive.line.saturating_add(1),
+                    &directive.rule_ids,
+                );
+            }
+        }
+    }
+
+    let source_end = source.len();
+    if let Some(start) = disabled_all_start {
+        plan.all_ranges.push(OffsetRange {
+            start,
+            end: source_end,
+        });
+    }
+    for (rule_id, (_, start)) in disabled_rule_states {
+        plan.rule_ranges
+            .entry(rule_id)
+            .or_default()
+            .push(OffsetRange {
+                start,
+                end: source_end,
+            });
+    }
+
+    plan
+}
+
+fn register_line_suppression(plan: &mut SuppressionPlan, line: usize, rule_ids: &[String]) {
+    if line == 0 {
+        return;
+    }
+
+    if rule_ids.is_empty() {
+        plan.line_all.insert(line);
+        return;
+    }
+
+    for rule_id in rule_ids {
+        plan.line_by_rule
+            .entry(rule_id.clone())
+            .or_default()
+            .insert(line);
+    }
+}
+
+fn collect_suppression_directives(source: &str) -> Vec<SuppressionDirective> {
+    let mut directives = Vec::new();
+    let line_index = LineIndex::new(source);
+    let bytes = source.as_bytes();
+    let mut cursor = 0usize;
+
+    while cursor + 1 < bytes.len() {
+        if bytes[cursor] != b'/' || bytes[cursor + 1] != b'*' {
+            cursor += 1;
+            continue;
+        }
+
+        let comment_start = cursor;
+        cursor += 2;
+        while cursor + 1 < bytes.len() && !(bytes[cursor] == b'*' && bytes[cursor + 1] == b'/') {
+            cursor += 1;
+        }
+
+        if cursor + 1 >= bytes.len() {
+            break;
+        }
+
+        let comment_end = cursor + 2;
+        let comment_body = source.get(comment_start + 2..cursor).unwrap_or("");
+        if let Some((command, rule_ids)) = parse_suppression_directive(comment_body) {
+            let (line, _) = line_index.offset_to_line_column(comment_start);
+            directives.push(SuppressionDirective {
+                command,
+                rule_ids,
+                start_offset: comment_start,
+                end_offset: comment_end,
+                line,
+            });
+        }
+
+        cursor = comment_end;
+    }
+
+    directives
+}
+
+fn parse_suppression_directive(comment_body: &str) -> Option<(SuppressionCommand, Vec<String>)> {
+    let normalized = normalize_comment_body(comment_body);
+    if normalized.is_empty() {
+        return None;
+    }
+
+    let mut parts = normalized.splitn(2, char::is_whitespace);
+    let command = parts.next()?.to_ascii_lowercase();
+    let rest = parts
+        .next()
+        .unwrap_or("")
+        .split("--")
+        .next()
+        .unwrap_or("")
+        .trim();
+
+    let suppression_command = match command.as_str() {
+        "csslint-disable" | "stylelint-disable" => SuppressionCommand::Disable,
+        "csslint-enable" | "stylelint-enable" => SuppressionCommand::Enable,
+        "csslint-disable-line" | "stylelint-disable-line" => SuppressionCommand::DisableLine,
+        "csslint-disable-next-line" | "stylelint-disable-next-line" => {
+            SuppressionCommand::DisableNextLine
+        }
+        _ => return None,
+    };
+
+    Some((suppression_command, parse_rule_ids(rest)))
+}
+
+fn normalize_comment_body(comment_body: &str) -> String {
+    comment_body
+        .lines()
+        .map(|line| line.trim())
+        .map(|line| line.strip_prefix('*').unwrap_or(line).trim())
+        .filter(|line| !line.is_empty())
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+fn parse_rule_ids(raw_rules: &str) -> Vec<String> {
+    if raw_rules.trim().is_empty() {
+        return Vec::new();
+    }
+
+    let mut rule_ids = raw_rules
+        .replace(',', " ")
+        .split_whitespace()
+        .map(canonicalize_suppression_rule_id)
+        .filter(|token| !token.is_empty())
+        .collect::<Vec<_>>();
+
+    if rule_ids.iter().any(|rule_id| rule_id == "all") {
+        return Vec::new();
+    }
+
+    rule_ids.sort();
+    rule_ids.dedup();
+    rule_ids
+}
+
+fn canonicalize_suppression_rule_id(token: &str) -> String {
+    let canonical = token.trim().to_ascii_lowercase().replace('-', "_");
+    match canonical.as_str() {
+        "block_no_empty" => "no_empty_rules".to_string(),
+        "declaration_block_no_duplicate_properties" => "no_duplicate_declarations".to_string(),
+        "declaration_property_value_no_unknown" => "no_invalid_values".to_string(),
+        "property_no_unknown" => "no_unknown_properties".to_string(),
+        "property_no_vendor_prefix" | "value_no_vendor_prefix" => {
+            "no_legacy_vendor_prefixes".to_string()
+        }
+        "selector_no_qualifying_type" => "no_overqualified_selectors".to_string(),
+        _ => canonical,
+    }
+}
+
+fn is_diagnostic_suppressed(
+    diagnostic: &Diagnostic,
+    line_index: &LineIndex,
+    plan: &SuppressionPlan,
+) -> bool {
+    let offset = diagnostic.span.start;
+    let (line, _) = line_index.offset_to_line_column(offset);
+    let rule_id = diagnostic.rule_id.as_str().to_ascii_lowercase();
+
+    if plan.line_all.contains(&line) {
+        return true;
+    }
+    if plan
+        .line_by_rule
+        .get(&rule_id)
+        .is_some_and(|lines| lines.contains(&line))
+    {
+        return true;
+    }
+
+    if offset_in_ranges(offset, &plan.all_ranges) {
+        return true;
+    }
+    plan.rule_ranges
+        .get(&rule_id)
+        .is_some_and(|ranges| offset_in_ranges(offset, ranges))
+}
+
+fn offset_in_ranges(offset: usize, ranges: &[OffsetRange]) -> bool {
+    ranges
+        .iter()
+        .any(|range| offset >= range.start && offset < range.end)
 }
 
 fn single_rule_config(rule_id: &str, severity: Severity) -> Config {
@@ -614,5 +922,106 @@ fn maybe_record_pass_rate_drop(label: &str, current: f64, baseline: f64, out: &m
             "{} regressed (current {:.4}, baseline {:.4})",
             label, current, baseline
         ));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        build_inline_suppression_plan, canonicalize_suppression_rule_id,
+        collect_suppression_directives, parse_rule_ids, parse_suppression_directive,
+        SuppressionCommand,
+    };
+
+    #[test]
+    fn maps_stylelint_rule_ids_to_csslint_rule_ids_for_suppressions() {
+        assert_eq!(
+            canonicalize_suppression_rule_id("block-no-empty"),
+            "no_empty_rules"
+        );
+        assert_eq!(
+            canonicalize_suppression_rule_id("property-no-vendor-prefix"),
+            "no_legacy_vendor_prefixes"
+        );
+        assert_eq!(
+            canonicalize_suppression_rule_id("selector-no-qualifying-type"),
+            "no_overqualified_selectors"
+        );
+    }
+
+    #[test]
+    fn preserves_unknown_rule_ids_in_canonical_form() {
+        assert_eq!(
+            canonicalize_suppression_rule_id("custom-rule-name"),
+            "custom_rule_name"
+        );
+    }
+
+    #[test]
+    fn parse_rule_ids_deduplicates_and_handles_all_keyword() {
+        assert_eq!(
+            parse_rule_ids("property-no-unknown, property-no-unknown block-no-empty"),
+            vec![
+                "no_empty_rules".to_string(),
+                "no_unknown_properties".to_string()
+            ]
+        );
+        assert!(parse_rule_ids("all").is_empty());
+    }
+
+    #[test]
+    fn parse_suppression_directive_accepts_mixed_case_and_reason_tail() {
+        let (command, rule_ids) = parse_suppression_directive(
+            "  StYLeLiNt-DiSaBlE-NeXt-LiNe property-no-unknown, block-no-empty -- rationale",
+        )
+        .expect("directive should parse");
+
+        assert_eq!(command, SuppressionCommand::DisableNextLine);
+        assert_eq!(
+            rule_ids,
+            vec![
+                "no_empty_rules".to_string(),
+                "no_unknown_properties".to_string()
+            ]
+        );
+    }
+
+    #[test]
+    fn nested_rule_disable_ranges_require_matching_enable_depth() {
+        let source = "/* stylelint-disable property-no-unknown */\n.one { colr: red; }\n/* stylelint-disable property-no-unknown */\n.two { colr: red; }\n/* stylelint-enable property-no-unknown */\n.three { colr: red; }\n/* stylelint-enable property-no-unknown */\n.four { colr: red; }\n";
+        let plan = build_inline_suppression_plan(source);
+        let ranges = plan
+            .rule_ranges
+            .get("no_unknown_properties")
+            .expect("rule range should be tracked");
+
+        assert_eq!(ranges.len(), 1);
+        assert!(ranges[0].start < ranges[0].end);
+    }
+
+    #[test]
+    fn unterminated_block_disable_extends_to_end_of_source() {
+        let source = "/* stylelint-disable property-no-unknown */\n.one { colr: red; }\n";
+        let plan = build_inline_suppression_plan(source);
+        let ranges = plan
+            .rule_ranges
+            .get("no_unknown_properties")
+            .expect("unterminated disable should create an open-ended rule range");
+
+        assert_eq!(ranges.len(), 1);
+        assert_eq!(ranges[0].end, source.len());
+    }
+
+    #[test]
+    fn unterminated_comment_does_not_create_directives() {
+        let source = "/* stylelint-disable property-no-unknown\n.one { colr: red; }\n";
+        let directives = collect_suppression_directives(source);
+        let plan = build_inline_suppression_plan(source);
+
+        assert!(directives.is_empty());
+        assert!(plan.all_ranges.is_empty());
+        assert!(plan.rule_ranges.is_empty());
+        assert!(plan.line_all.is_empty());
+        assert!(plan.line_by_rule.is_empty());
     }
 }

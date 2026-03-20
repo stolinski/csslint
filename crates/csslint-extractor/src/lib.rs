@@ -516,6 +516,31 @@ mod tests {
         assert_eq!(result.diagnostics[0].severity.as_str(), "warn");
     }
 
+    #[test]
+    fn matches_style_and_script_tags_case_insensitively() {
+        let source =
+            "<SCRIPT>const css = '<style>.fake { color: red; }</style>';</SCRIPT>\n<STYLE LANG=\"CSS\">.real { color: blue; }</STYLE>";
+        let result = extract_styles(FileId::new(21), Path::new("Comp.vue"), source);
+
+        assert_eq!(result.styles.len(), 1);
+        assert_eq!(result.styles[0].content.trim(), ".real { color: blue; }");
+        assert!(result.diagnostics.is_empty());
+    }
+
+    #[test]
+    fn reports_unclosed_style_tag_as_warning() {
+        let source = "<style scoped>.broken { color: red; }";
+        let result = extract_styles(FileId::new(22), Path::new("Comp.vue"), source);
+
+        assert!(result.styles.is_empty());
+        assert_eq!(result.diagnostics.len(), 1);
+        assert_eq!(
+            result.diagnostics[0].rule_id.as_str(),
+            "extractor_unclosed_style_tag"
+        );
+        assert_eq!(result.diagnostics[0].severity.as_str(), "warn");
+    }
+
     fn slice_from_style(source: &str, result: &ExtractionResult, index: usize) -> String {
         source
             .get(result.styles[index].start_offset..result.styles[index].end_offset)

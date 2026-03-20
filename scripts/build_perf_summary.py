@@ -43,6 +43,18 @@ def parse_args() -> argparse.Namespace:
         default=20.0,
         help="Memory regression budget percentage",
     )
+    parser.add_argument(
+        "--runtime-min-regression-ms",
+        type=float,
+        default=5.0,
+        help="Absolute runtime regression floor in milliseconds",
+    )
+    parser.add_argument(
+        "--memory-min-regression-bytes",
+        type=int,
+        default=1048576,
+        help="Absolute memory regression floor in bytes",
+    )
     return parser.parse_args()
 
 
@@ -108,6 +120,8 @@ def main() -> int:
         "budgets": {
             "runtimeRegressionPercent": args.runtime_budget_percent,
             "memoryRegressionPercent": args.memory_budget_percent,
+            "runtimeMinRegressionMs": args.runtime_min_regression_ms,
+            "memoryMinRegressionBytes": args.memory_min_regression_bytes,
         },
         "corpora": corpus_rows,
     }
@@ -139,6 +153,13 @@ def render_markdown(payload: dict) -> str:
             "- protocol: "
             f"{payload['protocol']['coldIterations']} cold / "
             f"{payload['protocol']['warmIterations']} warm iterations"
+        ),
+        (
+            "- perf budgets: "
+            f"runtime +{payload['budgets']['runtimeRegressionPercent']}% "
+            f"(>{payload['budgets']['runtimeMinRegressionMs']}ms), "
+            f"memory +{payload['budgets']['memoryRegressionPercent']}% "
+            f"(>{payload['budgets']['memoryMinRegressionBytes']} bytes)"
         ),
         "",
         "| Corpus | Files | csslint ms | stylelint ms | Runtime ratio | Throughput ratio |",

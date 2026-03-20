@@ -73,6 +73,21 @@
         "testRuleIndex": 0,
         "caseIndex": 0
       }
+    },
+    {
+      "id": "respect-stylelint-disable-block-comment",
+      "kind": "accept",
+      "fast": true,
+      "input": "/* stylelint-disable declaration-property-value-no-unknown */\na { display: squish; opacity: 2; }\n/* stylelint-enable declaration-property-value-no-unknown */",
+      "expected": {
+        "diagnostics": [],
+        "fixed": null
+      },
+      "source": {
+        "description": "respect stylelint disable block comment",
+        "testRuleIndex": 0,
+        "caseIndex": 1
+      }
     }
   ]
 }

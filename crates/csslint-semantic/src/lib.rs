@@ -3,7 +3,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use csslint_core::{map_local_span_to_global, FileId, Scope, Span};
-use csslint_parser::ParsedStyle;
+use csslint_parser::{ParsedRule, ParsedStyle};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct RuleNodeId(pub u32);
@@ -93,6 +93,8 @@ pub struct SemanticIndexes {
     pub declarations_by_rule: BTreeMap<RuleNodeId, Vec<DeclarationId>>,
     pub selectors_by_scope: BTreeMap<Scope, Vec<SelectorId>>,
     pub selectors_by_normalized: BTreeMap<String, Vec<SelectorId>>,
+    pub selectors_by_duplicate_key: BTreeMap<String, Vec<SelectorId>>,
+    pub duplicate_key_by_selector: BTreeMap<SelectorId, String>,
 }
 
 pub fn build_semantic_model(parsed: &ParsedStyle) -> CssSemanticModel {
@@ -106,101 +108,138 @@ pub fn build_semantic_model(parsed: &ParsedStyle) -> CssSemanticModel {
     let mut declaration_id_counter = 0u32;
     let mut at_rule_id_counter = 0u32;
 
-    let rule_blocks = parse_rule_blocks(&parsed.content);
-    for (rule_index, block) in rule_blocks.into_iter().enumerate() {
-        let rule_id = RuleNodeId(rule_index as u32);
-        let rule_span = map_local_span_to_global(parsed.span.start, block.span);
+    for parsed_rule in &parsed.rules {
+        let rule_id = RuleNodeId(rules.len() as u32);
         let mut selector_ids = Vec::new();
         let mut declaration_ids = Vec::new();
 
-        if block.selector.trim_start().starts_with('@') {
-            let (name, prelude) = parse_at_rule_head(&block.selector);
-            at_rules.push(AtRuleNode {
-                id: AtRuleId(at_rule_id_counter),
-                name,
-                prelude,
-                span: rule_span,
-            });
-            at_rule_id_counter += 1;
-        } else {
-            for raw_selector in split_selectors(&block.selector) {
-                let selector_id = SelectorId(selector_id_counter);
-                selector_id_counter += 1;
+        match parsed_rule {
+            ParsedRule::AtRule(at_rule) => {
+                let global_span = map_local_span_to_global(parsed.span.start, at_rule.span);
+                let local_segment = parsed
+                    .content
+                    .get(at_rule.span.start..at_rule.span.end)
+                    .unwrap_or("")
+                    .trim();
+                let (name, prelude) = parse_at_rule_segment(local_segment);
 
-                let normalized = normalize_selector(&raw_selector);
-                let parts = selector_parts(&raw_selector, parsed.scope);
-                let node = SelectorNode {
-                    id: selector_id,
-                    rule_id,
-                    raw: raw_selector,
-                    normalized: normalized.clone(),
-                    parts: parts.clone(),
-                    span: map_local_span_to_global(parsed.span.start, block.selector_span),
-                };
+                at_rules.push(AtRuleNode {
+                    id: AtRuleId(at_rule_id_counter),
+                    name,
+                    prelude,
+                    span: global_span,
+                });
+                at_rule_id_counter += 1;
 
-                for class_name in classes_in_selector(&node.normalized) {
+                rules.push(RuleNode {
+                    id: rule_id,
+                    selector_ids,
+                    declaration_ids,
+                    span: global_span,
+                    is_at_rule: true,
+                });
+            }
+            ParsedRule::Style(style_rule) => {
+                let rule_span = map_local_span_to_global(parsed.span.start, style_rule.span);
+                let selector_span =
+                    map_local_span_to_global(parsed.span.start, style_rule.selector_span);
+
+                for raw_selector in &style_rule.selectors {
+                    let selector_id = SelectorId(selector_id_counter);
+                    selector_id_counter += 1;
+
+                    let normalized = normalize_selector(raw_selector);
+                    let parts = selector_parts(raw_selector, parsed.scope);
+                    let node = SelectorNode {
+                        id: selector_id,
+                        rule_id,
+                        raw: raw_selector.clone(),
+                        normalized: normalized.clone(),
+                        parts: parts.clone(),
+                        span: selector_span,
+                    };
+
+                    for class_name in classes_in_selector(&node.normalized) {
+                        indexes
+                            .selectors_by_class
+                            .entry(class_name)
+                            .or_default()
+                            .push(selector_id);
+                    }
+
+                    let selector_scopes =
+                        parts.iter().map(|part| part.scope).collect::<BTreeSet<_>>();
+                    for selector_scope in selector_scopes {
+                        indexes
+                            .selectors_by_scope
+                            .entry(selector_scope)
+                            .or_default()
+                            .push(selector_id);
+                    }
                     indexes
-                        .selectors_by_class
-                        .entry(class_name)
+                        .selectors_by_normalized
+                        .entry(normalized)
                         .or_default()
                         .push(selector_id);
-                }
 
-                let selector_scopes = parts.iter().map(|part| part.scope).collect::<BTreeSet<_>>();
-                for selector_scope in selector_scopes {
+                    let duplicate_key = selector_duplicate_key(
+                        &style_rule.ancestor_selector_context,
+                        &style_rule.at_rule_context,
+                        &node.normalized,
+                    );
                     indexes
-                        .selectors_by_scope
-                        .entry(selector_scope)
+                        .selectors_by_duplicate_key
+                        .entry(duplicate_key.clone())
                         .or_default()
                         .push(selector_id);
-                }
-                indexes
-                    .selectors_by_normalized
-                    .entry(normalized)
-                    .or_default()
-                    .push(selector_id);
+                    indexes
+                        .duplicate_key_by_selector
+                        .insert(selector_id, duplicate_key);
 
-                selectors.push(node);
-                selector_ids.push(selector_id);
+                    selectors.push(node);
+                    selector_ids.push(selector_id);
+                }
+
+                for declaration in &style_rule.declarations {
+                    let declaration_id = DeclarationId(declaration_id_counter);
+                    declaration_id_counter += 1;
+
+                    let global_span = map_local_span_to_global(parsed.span.start, declaration.span);
+                    let node = DeclarationNode {
+                        id: declaration_id,
+                        rule_id,
+                        property: declaration.property.clone(),
+                        property_known: csslint_parser::is_known_property_name(
+                            &declaration.property,
+                        ),
+                        value: declaration.value.clone(),
+                        span: global_span,
+                    };
+
+                    indexes
+                        .declarations_by_prop
+                        .entry(node.property.to_ascii_lowercase())
+                        .or_default()
+                        .push(declaration_id);
+                    indexes
+                        .declarations_by_rule
+                        .entry(rule_id)
+                        .or_default()
+                        .push(declaration_id);
+
+                    declarations.push(node);
+                    declaration_ids.push(declaration_id);
+                }
+
+                rules.push(RuleNode {
+                    id: rule_id,
+                    selector_ids,
+                    declaration_ids,
+                    span: rule_span,
+                    is_at_rule: false,
+                });
             }
         }
-
-        for declaration in parse_declarations(&block.body, block.body_start) {
-            let declaration_id = DeclarationId(declaration_id_counter);
-            declaration_id_counter += 1;
-
-            let global_span = map_local_span_to_global(parsed.span.start, declaration.span);
-            let node = DeclarationNode {
-                id: declaration_id,
-                rule_id,
-                property: declaration.property.clone(),
-                property_known: csslint_parser::is_known_property_name(&declaration.property),
-                value: declaration.value,
-                span: global_span,
-            };
-
-            indexes
-                .declarations_by_prop
-                .entry(node.property.to_ascii_lowercase())
-                .or_default()
-                .push(declaration_id);
-            indexes
-                .declarations_by_rule
-                .entry(rule_id)
-                .or_default()
-                .push(declaration_id);
-
-            declarations.push(node);
-            declaration_ids.push(declaration_id);
-        }
-
-        rules.push(RuleNode {
-            id: rule_id,
-            selector_ids,
-            declaration_ids,
-            span: rule_span,
-            is_at_rule: block.selector.trim_start().starts_with('@'),
-        });
     }
 
     CssSemanticModel {
@@ -216,122 +255,21 @@ pub fn build_semantic_model(parsed: &ParsedStyle) -> CssSemanticModel {
     }
 }
 
-#[derive(Debug, Clone)]
-struct RuleBlock {
-    selector: String,
-    body: String,
-    span: Span,
-    selector_span: Span,
-    body_start: usize,
+fn parse_at_rule_segment(segment: &str) -> (String, String) {
+    let trimmed = segment.trim();
+    let without_at = trimmed.strip_prefix('@').unwrap_or(trimmed);
+    let mut parts = without_at.split_whitespace();
+    let name = parts.next().unwrap_or("").to_string();
+    let prelude = parts.collect::<Vec<_>>().join(" ");
+    (name, prelude)
 }
 
-fn parse_rule_blocks(source: &str) -> Vec<RuleBlock> {
-    let mut blocks = Vec::new();
-    let bytes = source.as_bytes();
-    let mut cursor = 0usize;
-
-    while cursor < bytes.len() {
-        let Some(open_brace) = find_byte(bytes, b'{', cursor) else {
-            break;
-        };
-
-        let Some(close_brace) = find_matching_brace(bytes, open_brace) else {
-            break;
-        };
-
-        let selector_region = &source[cursor..open_brace];
-        let (selector, selector_span) = trimmed_region(selector_region, cursor);
-        let body_start = open_brace + 1;
-        let body = source
-            .get(body_start..close_brace)
-            .unwrap_or("")
-            .to_string();
-
-        if !selector.is_empty() {
-            blocks.push(RuleBlock {
-                selector,
-                body,
-                span: Span::new(selector_span.start, close_brace + 1),
-                selector_span,
-                body_start,
-            });
-        }
-
-        cursor = close_brace + 1;
-    }
-
-    blocks
-}
-
-fn find_byte(bytes: &[u8], byte: u8, start: usize) -> Option<usize> {
-    bytes
-        .iter()
-        .enumerate()
-        .skip(start)
-        .find_map(|(index, current)| (*current == byte).then_some(index))
-}
-
-fn find_matching_brace(bytes: &[u8], open_index: usize) -> Option<usize> {
-    let mut depth = 1usize;
-    let mut quote: Option<u8> = None;
-    let mut index = open_index + 1;
-
-    while index < bytes.len() {
-        let current = bytes[index];
-        if let Some(active_quote) = quote {
-            if current == active_quote {
-                quote = None;
-            }
-            index += 1;
-            continue;
-        }
-
-        if current == b'"' || current == b'\'' {
-            quote = Some(current);
-            index += 1;
-            continue;
-        }
-
-        if current == b'{' {
-            depth += 1;
-        } else if current == b'}' {
-            depth -= 1;
-            if depth == 0 {
-                return Some(index);
-            }
-        }
-
-        index += 1;
-    }
-
-    None
-}
-
-fn trimmed_region(input: &str, absolute_start: usize) -> (String, Span) {
-    let bytes = input.as_bytes();
-    let mut start = 0usize;
-    let mut end = bytes.len();
-
-    while start < end && bytes[start].is_ascii_whitespace() {
-        start += 1;
-    }
-    while end > start && bytes[end - 1].is_ascii_whitespace() {
-        end -= 1;
-    }
-
-    (
-        input.get(start..end).unwrap_or("").to_string(),
-        Span::new(absolute_start + start, absolute_start + end),
-    )
-}
-
-fn split_selectors(selector_list: &str) -> Vec<String> {
-    selector_list
-        .split(',')
-        .map(str::trim)
-        .filter(|selector| !selector.is_empty())
-        .map(ToOwned::to_owned)
-        .collect()
+fn selector_duplicate_key(
+    ancestor_selector_context: &str,
+    at_rule_context: &str,
+    normalized_selector: &str,
+) -> String {
+    format!("{at_rule_context}||{ancestor_selector_context}||{normalized_selector}")
 }
 
 fn normalize_selector(raw: &str) -> String {
@@ -544,109 +482,23 @@ fn classes_in_selector(selector: &str) -> Vec<String> {
     classes
 }
 
-#[derive(Debug, Clone)]
-struct ParsedDeclaration {
-    property: String,
-    value: String,
-    span: Span,
-}
-
-fn parse_declarations(body: &str, body_start: usize) -> Vec<ParsedDeclaration> {
-    let bytes = body.as_bytes();
-    let mut declarations = Vec::new();
-    let mut segment_start = 0usize;
-
-    for (index, current) in bytes.iter().copied().enumerate() {
-        if current != b';' {
-            continue;
-        }
-
-        push_declaration_segment(
-            body,
-            body_start,
-            segment_start,
-            index + 1,
-            &mut declarations,
-        );
-        segment_start = index + 1;
-    }
-
-    if segment_start < bytes.len() {
-        push_declaration_segment(
-            body,
-            body_start,
-            segment_start,
-            bytes.len(),
-            &mut declarations,
-        );
-    }
-
-    declarations
-}
-
-fn push_declaration_segment(
-    body: &str,
-    body_start: usize,
-    segment_start: usize,
-    segment_end: usize,
-    target: &mut Vec<ParsedDeclaration>,
-) {
-    let segment = body.get(segment_start..segment_end).unwrap_or("");
-    let Some(colon_offset) = segment.find(':') else {
-        return;
-    };
-
-    let property = segment
-        .get(0..colon_offset)
-        .unwrap_or("")
-        .trim()
-        .to_string();
-    if property.is_empty() {
-        return;
-    }
-
-    let value = segment
-        .get(colon_offset + 1..)
-        .unwrap_or("")
-        .trim()
-        .trim_end_matches(';')
-        .trim()
-        .to_string();
-
-    let absolute_start = body_start + segment_start;
-    let absolute_end = body_start + segment_end;
-    target.push(ParsedDeclaration {
-        property,
-        value,
-        span: Span::new(absolute_start, absolute_end),
-    });
-}
-
-fn parse_at_rule_head(selector: &str) -> (String, String) {
-    let trimmed = selector.trim();
-    let without_at = trimmed.strip_prefix('@').unwrap_or(trimmed);
-    let mut parts = without_at.split_whitespace();
-    let name = parts.next().unwrap_or("").to_string();
-    let prelude = parts.collect::<Vec<_>>().join(" ");
-    (name, prelude)
-}
-
 #[cfg(test)]
 mod tests {
-    use csslint_core::{FileId, Scope, Span};
-    use csslint_parser::ParsedStyle;
+    use std::path::Path;
+
+    use csslint_core::{FileId, Scope};
 
     use crate::build_semantic_model;
 
+    fn parse_style(file_id: u32, file_name: &str, source: &str) -> csslint_parser::ParsedStyle {
+        let extraction =
+            csslint_extractor::extract_styles(FileId::new(file_id), Path::new(file_name), source);
+        csslint_parser::parse_style(&extraction.styles[0]).expect("fixture css should parse")
+    }
+
     #[test]
     fn builds_semantic_nodes_and_indexes() {
-        let parsed = ParsedStyle {
-            content: ".a, .b { color: red; margin: 0; }".to_string(),
-            span: Span::new(10, 44),
-            file_id: FileId::new(2),
-            scope: Scope::Global,
-            parsed_with_lightning: true,
-        };
+        let parsed = parse_style(2, "fixture.css", ".a, .b { color: red; margin: 0; }");
 
         let semantic = build_semantic_model(&parsed);
         assert_eq!(semantic.rules.len(), 1);
@@ -659,13 +511,7 @@ mod tests {
 
     #[test]
     fn tracks_empty_declaration_rules() {
-        let parsed = ParsedStyle {
-            content: ".empty {}".to_string(),
-            span: Span::new(0, 9),
-            file_id: FileId::new(3),
-            scope: Scope::Global,
-            parsed_with_lightning: true,
-        };
+        let parsed = parse_style(3, "empty.css", ".empty {}");
 
         let semantic = build_semantic_model(&parsed);
         assert_eq!(semantic.rules.len(), 1);
@@ -692,13 +538,11 @@ mod tests {
 
     #[test]
     fn applies_scope_defaults_and_global_overrides() {
-        let parsed = ParsedStyle {
-            content: ".foo :global(.bar) .baz { color: red; }".to_string(),
-            span: Span::new(0, 38),
-            file_id: FileId::new(4),
-            scope: Scope::VueScoped,
-            parsed_with_lightning: true,
-        };
+        let parsed = parse_style(
+            4,
+            "Scoped.vue",
+            "<template></template><style scoped>.foo :global(.bar) .baz { color: red; }</style>",
+        );
 
         let semantic = build_semantic_model(&parsed);
         let selector = &semantic.selectors[0];
@@ -716,5 +560,80 @@ mod tests {
             1
         );
         assert_eq!(semantic.indexes.selectors_by_scope[&Scope::Global].len(), 1);
+    }
+
+    #[test]
+    fn keeps_nested_rule_declarations_isolated() {
+        let parsed = parse_style(
+            5,
+            "nested.css",
+            "@media (max-width: 800px) {\n  .card { display: flex; background: var(--bg); }\n  .button { display: flex; background: var(--bg); }\n}",
+        );
+
+        let semantic = build_semantic_model(&parsed);
+        let declaration_counts = semantic
+            .rules
+            .iter()
+            .filter(|rule| !rule.is_at_rule)
+            .map(|rule| rule.declaration_ids.len())
+            .collect::<Vec<_>>();
+
+        assert_eq!(declaration_counts, vec![2, 2]);
+    }
+
+    #[test]
+    fn duplicate_selector_keys_include_at_rule_context() {
+        let parsed = parse_style(
+            6,
+            "contexts.css",
+            ".card { color: red; } @media (min-width: 600px) { .card { color: blue; } }",
+        );
+
+        let semantic = build_semantic_model(&parsed);
+        assert_eq!(semantic.selectors.len(), 2);
+        assert_eq!(semantic.indexes.selectors_by_duplicate_key.len(), 2);
+    }
+
+    #[test]
+    fn parses_at_rule_name_and_prelude() {
+        let parsed = parse_style(
+            7,
+            "atrule.css",
+            "@media (min-width: 600px) { .card { color: red; } }",
+        );
+
+        let semantic = build_semantic_model(&parsed);
+        assert_eq!(semantic.at_rules.len(), 1);
+        assert_eq!(semantic.at_rules[0].name, "media");
+        assert!(
+            semantic.at_rules[0].prelude.is_empty(),
+            "v1 semantic at-rule nodes currently capture the at-keyword head only"
+        );
+    }
+
+    #[test]
+    fn scope_indexes_deduplicate_multiple_global_segments_per_selector() {
+        let parsed = parse_style(
+            8,
+            "Scoped.vue",
+            "<template></template><style scoped>.root :global(.a) :global(.b) .leaf { color: red; }</style>",
+        );
+
+        let semantic = build_semantic_model(&parsed);
+        assert_eq!(semantic.selectors.len(), 1);
+        assert_eq!(
+            semantic.indexes.selectors_by_scope[&Scope::VueScoped].len(),
+            1
+        );
+        assert_eq!(semantic.indexes.selectors_by_scope[&Scope::Global].len(), 1);
+    }
+
+    #[test]
+    fn malformed_global_selector_segment_falls_back_to_default_scope() {
+        let parts = super::parts_for_token(":global(.missing", Scope::VueScoped);
+
+        assert_eq!(parts.len(), 1);
+        assert_eq!(parts[0].scope, Scope::VueScoped);
+        assert_eq!(parts[0].value, ":global(.missing");
     }
 }

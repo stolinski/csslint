@@ -76,6 +76,21 @@
         "reasonCode": "scss_less",
         "note": "Requires SCSS syntax support, which is deferred for v1."
       }
+    },
+    {
+      "id": "respect-stylelint-disable-next-line-comment",
+      "kind": "accept",
+      "fast": true,
+      "input": "/* stylelint-disable-next-line block-no-empty */\na {}",
+      "expected": {
+        "diagnostics": [],
+        "fixed": null
+      },
+      "source": {
+        "description": "respect stylelint disable-next-line comment",
+        "testRuleIndex": 0,
+        "caseIndex": 1
+      }
     }
   ]
 }

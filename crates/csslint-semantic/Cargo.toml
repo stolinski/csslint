@@ -10,3 +10,6 @@ path = "src/lib.rs"
 [dependencies]
 csslint-core = { path = "../csslint-core" }
 csslint-parser = { path = "../csslint-parser" }
+
+[dev-dependencies]
+csslint-extractor = { path = "../csslint-extractor" }

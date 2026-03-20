@@ -13,6 +13,7 @@ Provide a predictable, low-friction CLI and config system that supports local de
 Recommended optional flags:
 
 - `--config <path>`
+- `--ignore-path <path>`
 - `--max-warnings <n>`
 - `--quiet` (errors only)
 - `--targets <query or preset>`
@@ -115,8 +116,24 @@ Canonical schema files:
 ## File Discovery Rules
 
 - include: `.css`, `.vue`, `.svelte`
-- ignore by default: `node_modules`, build output dirs, hidden VCS dirs
+- ignore by default: dot-directories (for example `.svelte-kit`, `.git`, `.cache`), `node_modules`, and common build output dirs (`dist`, `build`)
+- apply `.csslintignore` patterns when present (nearest file by directory traversal), or explicit `--ignore-path`
 - support explicit include/exclude patterns in future versions
+
+## Inline Suppression Directives
+
+The CLI applies inline suppression directives before final reporting.
+
+Supported directives:
+
+- `/* csslint-disable */`
+- `/* csslint-enable */`
+- `/* csslint-disable <rule-a> <rule-b> */`
+- `/* csslint-enable <rule-a> <rule-b> */`
+- `/* csslint-disable-line [rule-a, rule-b] */`
+- `/* csslint-disable-next-line [rule-a, rule-b] */`
+
+Stylelint-prefixed aliases (`stylelint-disable*`) are accepted for migration compatibility.
 
 ## Target Configuration
 

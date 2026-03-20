@@ -799,8 +799,11 @@ fn placeholder_rule_metas() -> Vec<RuleMeta> {
     vec![]
 }
 
-fn no_empty_rules_on_rule(_semantic: &CssSemanticModel, rule: &RuleNode, ctx: &mut RuleRuntimeCtx) {
-    if rule.is_at_rule || !rule.declaration_ids.is_empty() {
+fn no_empty_rules_on_rule(semantic: &CssSemanticModel, rule: &RuleNode, ctx: &mut RuleRuntimeCtx) {
+    if rule.is_at_rule
+        || !rule.declaration_ids.is_empty()
+        || rule_contains_nested_blocks(semantic, rule)
+    {
         return;
     }
 
@@ -860,11 +863,24 @@ fn no_duplicate_selectors_on_selector(
     selector: &SelectorNode,
     ctx: &mut RuleRuntimeCtx,
 ) {
-    let Some(selector_ids) = semantic
+    let selector_ids = semantic
         .indexes
-        .selectors_by_normalized
-        .get(&selector.normalized)
-    else {
+        .duplicate_key_by_selector
+        .get(&selector.id)
+        .and_then(|duplicate_key| {
+            semantic
+                .indexes
+                .selectors_by_duplicate_key
+                .get(duplicate_key)
+        })
+        .or_else(|| {
+            semantic
+                .indexes
+                .selectors_by_normalized
+                .get(&selector.normalized)
+        });
+
+    let Some(selector_ids) = selector_ids else {
         return;
     };
 
@@ -1435,6 +1451,76 @@ fn at_rule_name_from_source(semantic: &CssSemanticModel, rule: &RuleNode) -> Opt
     }
 
     Some(name.to_ascii_lowercase())
+}
+
+fn rule_contains_nested_blocks(semantic: &CssSemanticModel, rule: &RuleNode) -> bool {
+    let local_start = match rule.span.start.checked_sub(semantic.span.start) {
+        Some(value) => value,
+        None => return false,
+    };
+    let local_end = match rule.span.end.checked_sub(semantic.span.start) {
+        Some(value) => value,
+        None => return false,
+    };
+    let Some(segment) = semantic.source.get(local_start..local_end) else {
+        return false;
+    };
+
+    let bytes = segment.as_bytes();
+    let mut brace_count = 0usize;
+    let mut quote: Option<u8> = None;
+    let mut in_comment = false;
+    let mut index = 0usize;
+
+    while index < bytes.len() {
+        let current = bytes[index];
+
+        if in_comment {
+            if current == b'*' && bytes.get(index + 1) == Some(&b'/') {
+                in_comment = false;
+                index += 2;
+            } else {
+                index += 1;
+            }
+            continue;
+        }
+
+        if let Some(active_quote) = quote {
+            if current == b'\\' {
+                index = index.saturating_add(2);
+                continue;
+            }
+
+            if current == active_quote {
+                quote = None;
+            }
+            index += 1;
+            continue;
+        }
+
+        if current == b'/' && bytes.get(index + 1) == Some(&b'*') {
+            in_comment = true;
+            index += 2;
+            continue;
+        }
+
+        if current == b'\'' || current == b'"' {
+            quote = Some(current);
+            index += 1;
+            continue;
+        }
+
+        if current == b'{' {
+            brace_count += 1;
+            if brace_count > 1 {
+                return true;
+            }
+        }
+
+        index += 1;
+    }
+
+    false
 }
 
 fn physical_to_logical_property(property: &str) -> Option<&'static str> {
@@ -2309,6 +2395,38 @@ mod tests {
             run_rules_with_config(&semantic, &config).expect("config should be valid");
         assert_eq!(diagnostics.len(), 1);
         assert_eq!(diagnostics[0].severity, Severity::Error);
+    }
+
+    #[test]
+    fn severity_off_override_disables_runtime_diagnostics() {
+        let semantic = CssSemanticModel {
+            file_id: FileId::new(16),
+            span: Span::new(0, 6),
+            scope: Scope::Global,
+            source: ".a {}".to_string(),
+            rules: vec![RuleNode {
+                id: RuleNodeId(0),
+                selector_ids: vec![],
+                declaration_ids: vec![],
+                span: Span::new(0, 5),
+                is_at_rule: false,
+            }],
+            selectors: vec![],
+            declarations: vec![],
+            at_rules: vec![],
+            indexes: SemanticIndexes::default(),
+        };
+
+        let mut config = Config::default();
+        config
+            .rules
+            .insert(RuleId::from("no_empty_rules"), Severity::Off);
+
+        let diagnostics =
+            run_rules_with_config(&semantic, &config).expect("config should be valid");
+        assert!(diagnostics
+            .iter()
+            .all(|diagnostic| diagnostic.rule_id.as_str() != "no_empty_rules"));
     }
 
     #[test]

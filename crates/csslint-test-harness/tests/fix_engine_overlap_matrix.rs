@@ -115,6 +115,7 @@ fn repeated_fix_pipeline_is_noop_after_first_pass() {
     let second_run = run_fix_pipeline(FileId::new(951), &first_run.updated, &second_fixable);
 
     assert_eq!(second_run.applied, 0);
+    assert_eq!(second_run.rejected, 0);
     assert_eq!(second_run.updated, first_run.updated);
 }
 
@@ -170,9 +171,12 @@ fn lint_source(path: &str, source: &str, file_id: FileId) -> Vec<Diagnostic> {
     let mut diagnostics = extraction.diagnostics;
 
     for style in extraction.styles {
-        if let Ok(parsed) = csslint_parser::parse_style(&style) {
-            let semantic = csslint_semantic::build_semantic_model(&parsed);
-            diagnostics.extend(csslint_rules::run_rules(&semantic));
+        match csslint_parser::parse_style(&style) {
+            Ok(parsed) => {
+                let semantic = csslint_semantic::build_semantic_model(&parsed);
+                diagnostics.extend(csslint_rules::run_rules(&semantic));
+            }
+            Err(diagnostic) => diagnostics.push(*diagnostic),
         }
     }
 

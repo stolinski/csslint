@@ -34,6 +34,18 @@ def parse_args() -> argparse.Namespace:
         help="Allowed peak RSS regression percentage",
     )
     parser.add_argument(
+        "--runtime-min-regression-ms",
+        type=float,
+        default=5.0,
+        help="Ignore runtime regressions smaller than this absolute delta",
+    )
+    parser.add_argument(
+        "--memory-min-regression-bytes",
+        type=int,
+        default=1048576,
+        help="Ignore memory regressions smaller than this absolute delta",
+    )
+    parser.add_argument(
         "--override-rationale",
         default="",
         help="Explicit rationale string that allows budget override",
@@ -63,17 +75,28 @@ def main() -> int:
             corpus["csslint"].get("peakRssBytes", 0),
             base["csslint"].get("peakRssBytes", 0),
         )
+        runtime_delta_ms = corpus["csslint"]["totalMs"] - base["csslint"]["totalMs"]
+        memory_delta_bytes = (
+            corpus["csslint"].get("peakRssBytes", 0)
+            - base["csslint"].get("peakRssBytes", 0)
+        )
 
         runtime_limit = 1.0 + (args.runtime_budget_percent / 100.0)
         memory_limit = 1.0 + (args.memory_budget_percent / 100.0)
 
-        if runtime_ratio > runtime_limit:
+        if (
+            runtime_ratio > runtime_limit
+            and runtime_delta_ms > args.runtime_min_regression_ms
+        ):
             violations.append(
-                f"{corpus_id}: runtime regression {runtime_ratio:.3f}x exceeds {runtime_limit:.3f}x"
+                f"{corpus_id}: runtime regression {runtime_ratio:.3f}x exceeds {runtime_limit:.3f}x (delta={runtime_delta_ms:.2f}ms)"
             )
-        if memory_ratio > memory_limit:
+        if (
+            memory_ratio > memory_limit
+            and memory_delta_bytes > args.memory_min_regression_bytes
+        ):
             violations.append(
-                f"{corpus_id}: peak RSS regression {memory_ratio:.3f}x exceeds {memory_limit:.3f}x"
+                f"{corpus_id}: peak RSS regression {memory_ratio:.3f}x exceeds {memory_limit:.3f}x (delta={memory_delta_bytes} bytes)"
             )
 
     if violations and args.override_rationale.strip():

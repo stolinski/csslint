@@ -24,6 +24,11 @@ The commit SHA is intentionally fixed so fixture imports are reproducible.
 - `skip-manifest.yaml`: explicit skips with reason codes
 - `baseline/`: ratchet baseline used by compatibility metrics checks
 
+Directive-comment coverage notes:
+
+- Imported suites include `stylelint-disable*` compatibility cases across mapped rules.
+- Cases are executed (not skipped) when suppression semantics are supported.
+
 ## Update Workflow
 
 1. Update `source-pin.json` to a new Stylelint commit.

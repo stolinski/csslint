@@ -6,6 +6,11 @@ testRule({
       code: "a { color: red; }",
       description: "accept non-empty block",
       fast: true
+    },
+    {
+      code: "/* stylelint-disable-next-line block-no-empty */\na {}",
+      description: "respect stylelint disable-next-line comment",
+      fast: true
     }
   ],
   reject: [

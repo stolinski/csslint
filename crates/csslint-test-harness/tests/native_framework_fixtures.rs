@@ -179,6 +179,78 @@ fn framework_extractor_fixtures_match_expected_output() {
 }
 
 #[test]
+fn extractor_skips_unsupported_vue_lang_block_with_error_and_keeps_css_blocks() {
+    let source = concat!(
+        "<template/>\n",
+        "<style lang=\"scss\">$accent: red;</style>\n",
+        "<style>.ok { color: red; }</style>\n",
+    );
+    let path = Path::new("UnsupportedLang.vue");
+
+    let extracted = csslint_extractor::extract_styles(FileId::new(302), path, source);
+    assert_eq!(
+        extracted.styles.len(),
+        1,
+        "unsupported style language should be skipped"
+    );
+    assert_eq!(
+        extracted.styles[0].content, ".ok { color: red; }",
+        "supported css block should still be extracted"
+    );
+    assert_eq!(
+        extracted.diagnostics.len(),
+        1,
+        "unsupported style language should emit one diagnostic"
+    );
+    assert_eq!(
+        extracted.diagnostics[0].rule_id.as_str(),
+        "unsupported_style_lang",
+        "unexpected diagnostic rule for unsupported style language"
+    );
+    assert_eq!(
+        extracted.diagnostics[0].severity.as_str(),
+        "error",
+        "unsupported style language should be reported as error"
+    );
+}
+
+#[test]
+fn extractor_skips_vue_src_blocks_with_warning_and_keeps_inline_css_blocks() {
+    let source = concat!(
+        "<template/>\n",
+        "<style src=\"./remote.css\"></style>\n",
+        "<style scoped>.ok { color: red; }</style>\n",
+    );
+    let path = Path::new("ExternalSrc.vue");
+
+    let extracted = csslint_extractor::extract_styles(FileId::new(303), path, source);
+    assert_eq!(
+        extracted.styles.len(),
+        1,
+        "external src block should be skipped"
+    );
+    assert_eq!(
+        extracted.styles[0].content, ".ok { color: red; }",
+        "inline css block should still be extracted"
+    );
+    assert_eq!(
+        extracted.diagnostics.len(),
+        1,
+        "external src block should emit one diagnostic"
+    );
+    assert_eq!(
+        extracted.diagnostics[0].rule_id.as_str(),
+        "unsupported_external_style_src",
+        "unexpected diagnostic rule for external src block"
+    );
+    assert_eq!(
+        extracted.diagnostics[0].severity.as_str(),
+        "warn",
+        "external src block should be reported as warning"
+    );
+}
+
+#[test]
 fn shared_mapping_fixtures_validate_offsets_and_line_columns() {
     let mapping_root = native_fixture_root().join("shared/mapping");
     let case_dirs = fixture_case_dirs(&mapping_root);

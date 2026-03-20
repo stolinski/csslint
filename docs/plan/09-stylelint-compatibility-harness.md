@@ -42,7 +42,7 @@ From Stylelint repository test files:
 
 - SCSS/LESS custom syntax cases
 - PostCSS plugin integration tests
-- stylelint directive-comment behavior (`stylelint-disable*`) unless implemented
+- stylelint directive-comment behavior beyond core `stylelint-disable*`/`stylelint-enable*` compatibility unless implemented
 - arbitrary custom syntax adapters
 
 ## Fixture Translation Pipeline

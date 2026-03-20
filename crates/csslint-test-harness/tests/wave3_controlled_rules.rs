@@ -13,6 +13,11 @@ fn wave3_rules_cover_imported_css_cases() {
     );
 
     let wave3 = wave3_diagnostics(&diagnostics);
+    assert_eq!(
+        wave3.len(),
+        2,
+        "imported.css should emit exactly two wave3 diagnostics"
+    );
     assert_rule_presence("imported.css", &wave3, "no_invalid_values");
     assert_rule_presence("imported.css", &wave3, "no_deprecated_features");
     assert!(
@@ -36,10 +41,37 @@ fn wave3_rules_cover_native_vue_and_svelte_cases() {
     );
 }
 
+#[test]
+fn wave3_unsupported_style_language_reports_error_and_skips_rules() {
+    let diagnostics = lint_source(
+        "Fixture.vue",
+        "<template><article class=\"card\"></article></template>\n<style lang=\"scss\">\n@viewport { width: device-width; }\narticle.card { display: squish; }\n</style>\n",
+        FileId::new(933),
+    );
+    let wave3 = wave3_diagnostics(&diagnostics);
+
+    assert!(
+        wave3.is_empty(),
+        "unsupported lang blocks should be skipped for wave3 rules"
+    );
+    assert!(
+        diagnostics.iter().any(|diagnostic| diagnostic
+            .message
+            .to_ascii_lowercase()
+            .contains("unsupported")),
+        "unsupported lang should emit an extractor diagnostic"
+    );
+}
+
 fn run_native_case(path: &str, source: &str, file_id: FileId) {
     let diagnostics = lint_source(path, source, file_id);
     let wave3 = wave3_diagnostics(&diagnostics);
 
+    assert_eq!(
+        wave3.len(),
+        2,
+        "{path} should emit exactly two wave3 diagnostics"
+    );
     assert_rule_presence(path, &wave3, "no_invalid_values");
     assert_rule_presence(path, &wave3, "no_deprecated_features");
     assert!(
@@ -62,9 +94,12 @@ fn lint_source(path: &str, source: &str, file_id: FileId) -> Vec<Diagnostic> {
     let mut diagnostics = extraction.diagnostics;
 
     for style in extraction.styles {
-        if let Ok(parsed) = csslint_parser::parse_style(&style) {
-            let semantic = csslint_semantic::build_semantic_model(&parsed);
-            diagnostics.extend(csslint_rules::run_rules(&semantic));
+        match csslint_parser::parse_style(&style) {
+            Ok(parsed) => {
+                let semantic = csslint_semantic::build_semantic_model(&parsed);
+                diagnostics.extend(csslint_rules::run_rules(&semantic));
+            }
+            Err(diagnostic) => diagnostics.push(*diagnostic),
         }
     }
 

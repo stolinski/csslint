@@ -5,6 +5,11 @@ testRule({
       code: ".card { color: red; }",
       description: "accept class selector",
       fast: true
+    },
+    {
+      code: "/* stylelint-disable-next-line selector-no-qualifying-type */\narticle.card { color: red; }",
+      description: "respect stylelint disable-next-line comment",
+      fast: true
     }
   ],
   reject: [

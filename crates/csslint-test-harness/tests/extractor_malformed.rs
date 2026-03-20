@@ -6,7 +6,13 @@ use csslint_core::FileId;
 
 #[test]
 fn malformed_corpus_never_panics_and_reports_controlled_diagnostics() {
-    for file in malformed_fixture_files() {
+    let files = malformed_fixture_files();
+    assert!(
+        !files.is_empty(),
+        "malformed fixture corpus should not be empty"
+    );
+
+    for file in files {
         let source = fs::read_to_string(&file)
             .unwrap_or_else(|error| panic!("failed to read {}: {error}", file.display()));
 
@@ -32,6 +38,12 @@ fn malformed_corpus_never_panics_and_reports_controlled_diagnostics() {
                 ),
                 "unexpected diagnostic {} in {}",
                 diagnostic.rule_id.as_str(),
+                file.display()
+            );
+            assert!(
+                matches!(diagnostic.severity.as_str(), "error" | "warn"),
+                "unexpected diagnostic severity {} in {}",
+                diagnostic.severity.as_str(),
                 file.display()
             );
         }

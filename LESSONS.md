@@ -50,3 +50,4 @@
 - Test-harness fixture paths should anchor from `env!("CARGO_MANIFEST_DIR")` (then walk to workspace `tests/`) so reliability suites work the same under package-scoped and workspace-scoped `cargo test` invocations.
 - Parallel determinism checks stay stable when `FileId` assignment is derived from sorted input order before worker fan-out, then diagnostics are merged through the shared deterministic sorter.
 - Low-overhead rule profiling works best by timing each rule callback dispatch and aggregating elapsed ms per rule ID in the engine, then surfacing only top-N slow files/rules behind CLI `--profile` so default report contracts remain unchanged.
+- Perf comparisons become artificially inflated when Stylelint is executed per file; running one Stylelint process per corpus iteration and gating regressions with both percentage and absolute deltas yields far more stable, real-world signals.

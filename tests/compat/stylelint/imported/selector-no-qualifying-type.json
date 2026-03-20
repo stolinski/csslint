@@ -76,6 +76,21 @@
         "testRuleIndex": 0,
         "caseIndex": 0
       }
+    },
+    {
+      "id": "respect-stylelint-disable-next-line-comment",
+      "kind": "accept",
+      "fast": true,
+      "input": "/* stylelint-disable-next-line selector-no-qualifying-type */\narticle.card { color: red; }",
+      "expected": {
+        "diagnostics": [],
+        "fixed": null
+      },
+      "source": {
+        "description": "respect stylelint disable-next-line comment",
+        "testRuleIndex": 0,
+        "caseIndex": 1
+      }
     }
   ]
 }

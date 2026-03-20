@@ -84,6 +84,7 @@ Every release gate has an owning CI lane and a blocking policy. A release candid
 - csslint must not regress against `main` baseline by:
   - more than 20 percent median runtime, or
   - more than 20 percent peak memory,
+  using both percentage and absolute floors (default: `>5ms` runtime delta, `>1MiB` memory delta) to avoid tiny-corpus noise,
   unless explicitly accepted in PR notes with rationale.
 
 Note: v1 does not require a fixed speedup multiplier over Stylelint, but every release report must include the comparison table.

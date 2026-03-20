@@ -5,6 +5,11 @@ testRule({
       code: "a { display: flex; }",
       description: "accept known display value",
       fast: true
+    },
+    {
+      code: "/* stylelint-disable declaration-property-value-no-unknown */\na { display: squish; opacity: 2; }\n/* stylelint-enable declaration-property-value-no-unknown */",
+      description: "respect stylelint disable block comment",
+      fast: true
     }
   ],
   reject: [

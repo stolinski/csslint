@@ -135,6 +135,19 @@ fn required_rule_test_matrix_cells_are_green() {
             "prefer_logical_properties",
         );
     }
+
+    for rule_id in [
+        "no_unknown_properties",
+        "no_invalid_values",
+        "no_duplicate_selectors",
+        "no_overqualified_selectors",
+        "no_deprecated_features",
+        "no_global_leaks",
+    ] {
+        for context in all_contexts {
+            assert_rule_fix_not_available(&diagnostics_by_context, context, rule_id);
+        }
+    }
 }
 
 fn assert_rule_reported(
@@ -185,14 +198,33 @@ fn assert_rule_fix_available(
     );
 }
 
+fn assert_rule_fix_not_available(
+    diagnostics_by_context: &BTreeMap<MatrixContext, Vec<Diagnostic>>,
+    context: MatrixContext,
+    rule_id: &str,
+) {
+    let diagnostics = diagnostics_by_context
+        .get(&context)
+        .expect("missing matrix context diagnostics");
+    assert!(
+        diagnostics
+            .iter()
+            .all(|diagnostic| diagnostic.rule_id.as_str() != rule_id || diagnostic.fix.is_none()),
+        "{context:?} should not include fix support for {rule_id}"
+    );
+}
+
 fn lint_source(path: &str, source: &str, file_id: FileId) -> Vec<Diagnostic> {
     let extraction = csslint_extractor::extract_styles(file_id, Path::new(path), source);
     let mut diagnostics = extraction.diagnostics;
 
     for style in extraction.styles {
-        if let Ok(parsed) = csslint_parser::parse_style(&style) {
-            let semantic = csslint_semantic::build_semantic_model(&parsed);
-            diagnostics.extend(csslint_rules::run_rules(&semantic));
+        match csslint_parser::parse_style(&style) {
+            Ok(parsed) => {
+                let semantic = csslint_semantic::build_semantic_model(&parsed);
+                diagnostics.extend(csslint_rules::run_rules(&semantic));
+            }
+            Err(diagnostic) => diagnostics.push(*diagnostic),
         }
     }
 

@@ -52,3 +52,8 @@ When planning is complete, this folder should let you do three things quickly:
 - lock v1 scope and avoid scope creep
 - convert each step into backlog tasks with clear dependencies
 - start implementation without re-deciding architecture fundamentals
+
+## Related Readiness Doc
+
+- [Replacement Readiness Checklist](../replacement-readiness-checklist.md)
+- [Documentation Index](../README.md)

@@ -54,6 +54,15 @@ fn framework_rule_fixtures_match_expected_native_behavior() {
                 "target rule count mismatch for {}",
                 case_dir.display()
             );
+
+            let diagnostics_rerun = lint_source(&input_path, &source, FileId::new(501));
+            let rerun_counts = collect_target_rule_counts(&diagnostics_rerun);
+            assert_eq!(
+                rerun_counts,
+                actual,
+                "target rule counts must be deterministic across reruns for {}",
+                case_dir.display()
+            );
         }
     }
 }

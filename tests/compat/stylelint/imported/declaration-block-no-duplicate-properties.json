@@ -41,7 +41,7 @@
       "source": {
         "description": "ignore duplicate values with stylelint option",
         "testRuleIndex": 0,
-        "caseIndex": 1
+        "caseIndex": 2
       },
       "skip": {
         "reasonCode": "unsupported_option",
@@ -68,6 +68,21 @@
         "description": "reject duplicate declaration",
         "testRuleIndex": 0,
         "caseIndex": 0
+      }
+    },
+    {
+      "id": "respect-stylelint-disable-line-comment",
+      "kind": "accept",
+      "fast": true,
+      "input": "a { /* stylelint-disable-line declaration-block-no-duplicate-properties */ color: red; color: red; }",
+      "expected": {
+        "diagnostics": [],
+        "fixed": null
+      },
+      "source": {
+        "description": "respect stylelint disable-line comment",
+        "testRuleIndex": 0,
+        "caseIndex": 1
       }
     }
   ]

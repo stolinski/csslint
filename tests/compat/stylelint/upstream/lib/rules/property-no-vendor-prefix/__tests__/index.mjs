@@ -6,6 +6,11 @@ testRule({
       code: "a { transform: rotate(0); }",
       description: "accept unprefixed property",
       fast: true
+    },
+    {
+      code: "a { /* stylelint-disable-line property-no-vendor-prefix */ -webkit-transform: rotate(0); }",
+      description: "respect stylelint disable-line comment",
+      fast: true
     }
   ],
   reject: [

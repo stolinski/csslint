@@ -49,6 +49,21 @@
         "testRuleIndex": 0,
         "caseIndex": 0
       }
+    },
+    {
+      "id": "respect-stylelint-disable-line-comment",
+      "kind": "accept",
+      "fast": true,
+      "input": "a { /* stylelint-disable-line property-no-vendor-prefix */ -webkit-transform: rotate(0); }",
+      "expected": {
+        "diagnostics": [],
+        "fixed": null
+      },
+      "source": {
+        "description": "respect stylelint disable-line comment",
+        "testRuleIndex": 0,
+        "caseIndex": 1
+      }
     }
   ]
 }

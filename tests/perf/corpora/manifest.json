@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "corpora": [
+    {
+      "corpusId": "css-only",
+      "files": 18,
+      "totalBytes": 454,
+      "digest": "024f3f5c986c3bd6"
+    },
+    {
+      "corpusId": "vue-heavy",
+      "files": 16,
+      "totalBytes": 2107,
+      "digest": "d6e61055102f0269"
+    },
+    {
+      "corpusId": "svelte-heavy",
+      "files": 13,
+      "totalBytes": 1422,
+      "digest": "9228e96dd87ad662"
+    },
+    {
+      "corpusId": "mixed",
+      "files": 47,
+      "totalBytes": 3983,
+      "digest": "d0a560f3c5d541f5"
+    }
+  ]
+}

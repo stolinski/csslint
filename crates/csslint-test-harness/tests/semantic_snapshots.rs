@@ -29,7 +29,13 @@ struct ActualSelector {
 
 #[test]
 fn semantic_snapshots_match_expected() {
-    for case_dir in semantic_case_dirs() {
+    let case_dirs = semantic_case_dirs();
+    assert!(
+        !case_dirs.is_empty(),
+        "semantic fixture corpus should not be empty"
+    );
+
+    for case_dir in case_dirs {
         let input_path = fixture_input_path(&case_dir);
         let source = fs::read_to_string(&input_path)
             .unwrap_or_else(|error| panic!("failed to read {}: {error}", input_path.display()));
@@ -162,6 +168,14 @@ fn fixture_input_path(case_dir: &Path) -> PathBuf {
         })
         .collect::<Vec<_>>();
     candidates.sort();
+
+    assert_eq!(
+        candidates.len(),
+        1,
+        "expected exactly one input.* fixture in {}",
+        case_dir.display()
+    );
+
     candidates
         .into_iter()
         .next()

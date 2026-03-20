@@ -19,14 +19,35 @@ fn diagnostics_and_fixes_are_deterministic_across_thread_counts() {
         "determinism corpus must include fixture files"
     );
 
+    let file_count = files.len();
+
     let baseline = run_parallel_lint(files.clone(), 1);
+    assert_eq!(
+        baseline.fixed_outputs.len(),
+        file_count,
+        "every fixture file should produce a fixed output entry"
+    );
+
     let threads_2 = run_parallel_lint(files.clone(), 2);
-    let threads_4 = run_parallel_lint(files, 4);
+    let threads_4 = run_parallel_lint(files.clone(), 4);
+    let threads_8 = run_parallel_lint(files.clone(), 8);
 
     assert_eq!(baseline.diagnostics, threads_2.diagnostics);
     assert_eq!(baseline.diagnostics, threads_4.diagnostics);
+    assert_eq!(baseline.diagnostics, threads_8.diagnostics);
     assert_eq!(baseline.fixed_outputs, threads_2.fixed_outputs);
     assert_eq!(baseline.fixed_outputs, threads_4.fixed_outputs);
+    assert_eq!(baseline.fixed_outputs, threads_8.fixed_outputs);
+
+    for _ in 0..2 {
+        let repeat_threads_4 = run_parallel_lint(files.clone(), 4);
+        assert_eq!(baseline.diagnostics, repeat_threads_4.diagnostics);
+        assert_eq!(baseline.fixed_outputs, repeat_threads_4.fixed_outputs);
+    }
+
+    let repeated_baseline = run_parallel_lint(files, 1);
+    assert_eq!(baseline.diagnostics, repeated_baseline.diagnostics);
+    assert_eq!(baseline.fixed_outputs, repeated_baseline.fixed_outputs);
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

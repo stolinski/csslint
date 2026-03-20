@@ -1,0 +1,63 @@
+@layer tokens, prose, utilities;
+
+@layer tokens {
+  :root {
+    --font-sans: "Sora", "Manrope", sans-serif;
+    --font-mono: "JetBrains Mono", ui-monospace, monospace;
+    --c-bg: oklch(98% 0.01 250);
+    --c-fg: oklch(30% 0.03 250);
+    --c-line: color-mix(in oklch, var(--c-fg), transparent 84%);
+    --c-brand: oklch(66% 0.2 262);
+    --space-1: clamp(0.5rem, 0.36rem + 0.35vw, 0.7rem);
+    --space-2: clamp(0.75rem, 0.54rem + 0.6vw, 1rem);
+    --space-3: clamp(1rem, 0.78rem + 0.8vw, 1.4rem);
+  }
+}
+
+@layer prose {
+  .prose {
+    max-inline-size: 72ch;
+    font-family: var(--font-sans);
+    color: var(--c-fg);
+    line-height: 1.65;
+
+    & > * + * {
+      margin-block-start: var(--space-2);
+    }
+
+    & :is(h1, h2, h3) {
+      line-height: 1.15;
+      letter-spacing: -0.015em;
+      text-wrap: balance;
+    }
+
+    & code {
+      font-family: var(--font-mono);
+      background: color-mix(in oklch, var(--c-brand), transparent 90%);
+      border: 1px solid color-mix(in oklch, var(--c-brand), transparent 74%);
+      border-radius: 0.4rem;
+      padding-inline: 0.35em;
+    }
+
+    & pre {
+      border: 1px solid var(--c-line);
+      border-radius: 0.9rem;
+      padding: var(--space-2);
+      overflow: auto;
+    }
+  }
+}
+
+@layer utilities {
+  .stack {
+    display: grid;
+    gap: var(--space-2);
+  }
+
+  .surface {
+    border: 1px solid var(--c-line);
+    border-radius: 1rem;
+    background: var(--c-bg);
+    padding: var(--space-3);
+  }
+}

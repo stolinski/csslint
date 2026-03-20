@@ -287,6 +287,22 @@ mod tests {
     }
 
     #[test]
+    fn line_index_clamps_offsets_beyond_source_end() {
+        let index = LineIndex::new("ab\ncd");
+
+        assert_eq!(index.offset_to_line_column(999), (2, 3));
+    }
+
+    #[test]
+    fn line_index_handles_standalone_carriage_returns() {
+        let index = LineIndex::new("a\rb\rc");
+
+        assert_eq!(index.line_starts(), &[0, 2, 4]);
+        assert_eq!(index.offset_to_line_column(2), (2, 1));
+        assert_eq!(index.offset_to_line_column(4), (3, 1));
+    }
+
+    #[test]
     fn maps_local_spans_to_global_offsets() {
         let local = Span::new(3, 8);
         let global = map_local_span_to_global(40, local);

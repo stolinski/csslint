@@ -1,0 +1,184 @@
+@layer tokens, app, charts, tables;
+
+@layer tokens {
+  :root {
+    --bg: oklch(97% 0.015 250);
+    --fg: oklch(28% 0.03 255);
+    --fg-muted: oklch(48% 0.02 255);
+    --line: color-mix(in oklch, var(--fg), transparent 86%);
+    --accent: oklch(62% 0.21 262);
+    --good: oklch(72% 0.17 152);
+    --warn: oklch(79% 0.17 86);
+    --bad: oklch(62% 0.22 26);
+  }
+}
+
+@layer app {
+  .app-shell {
+    display: grid;
+    grid-template-columns: 17rem minmax(0, 1fr);
+    min-height: 100svh;
+    background: var(--bg);
+    color: var(--fg);
+  }
+
+  .main-panel {
+    padding: clamp(1rem, 1.4vw + 0.6rem, 2rem);
+    display: grid;
+    gap: 1rem;
+  }
+
+  .kpi-grid {
+    container: kpis / inline-size;
+    display: grid;
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    gap: 0.85rem;
+
+    & > article {
+      grid-column: span 3;
+      border: 1px solid var(--line);
+      border-radius: 1rem;
+      background: light-dark(white, oklch(25% 0.01 255));
+      padding: 0.9rem;
+      display: grid;
+      gap: 0.35rem;
+
+      & > .label {
+        color: var(--fg-muted);
+        font-size: 0.82rem;
+      }
+
+      & > .value {
+        font-size: clamp(1.2rem, 1.1rem + 0.4vw, 1.75rem);
+        font-variant-numeric: tabular-nums;
+      }
+    }
+  }
+
+  @container kpis (width < 70rem) {
+    .kpi-grid > article {
+      grid-column: span 4;
+    }
+  }
+
+  @container kpis (width < 44rem) {
+    .kpi-grid > article {
+      grid-column: span 6;
+    }
+  }
+}
+
+@layer charts {
+  .sparkline {
+    --stroke: var(--accent);
+    inline-size: 100%;
+    block-size: 4.5rem;
+    overflow: visible;
+
+    & path {
+      fill: none;
+      stroke: var(--stroke);
+      stroke-width: 2;
+      vector-effect: non-scaling-stroke;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    & .area {
+      fill: color-mix(in oklch, var(--stroke), transparent 78%);
+      stroke: none;
+    }
+  }
+
+  .chart {
+    border: 1px solid var(--line);
+    border-radius: 1rem;
+    background: light-dark(white, oklch(24% 0.01 255));
+    padding: 1rem;
+    container-type: inline-size;
+
+    & .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.45rem 0.8rem;
+      margin-block-end: 0.7rem;
+    }
+
+    & .legend-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      color: var(--fg-muted);
+
+      &::before {
+        content: "";
+        inline-size: 0.55rem;
+        block-size: 0.55rem;
+        border-radius: 999px;
+        background: var(--swatch, var(--accent));
+      }
+    }
+  }
+
+  @container (width > 52rem) {
+    .chart-layout {
+      display: grid;
+      grid-template-columns: 1.3fr 1fr;
+      gap: 1rem;
+      align-items: start;
+    }
+  }
+}
+
+@layer tables {
+  .grid-table {
+    border: 1px solid var(--line);
+    border-radius: 1rem;
+    overflow: clip;
+    background: light-dark(white, oklch(24% 0.01 255));
+
+    & > :is(header, .row) {
+      display: grid;
+      grid-template-columns: minmax(11rem, 1.3fr) repeat(4, minmax(0, 1fr));
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.7rem 0.9rem;
+    }
+
+    & > header {
+      position: sticky;
+      inset-block-start: 0;
+      z-index: 2;
+      background: color-mix(in oklch, var(--bg), white 35%);
+      border-block-end: 1px solid var(--line);
+      text-transform: uppercase;
+      font-size: 0.73rem;
+      letter-spacing: 0.08em;
+      color: var(--fg-muted);
+    }
+
+    & > .row {
+      border-block-end: 1px solid var(--line);
+
+      &:nth-child(2n) {
+        background: color-mix(in oklch, var(--bg), white 25%);
+      }
+
+      &:hover {
+        background: color-mix(in oklch, var(--accent), transparent 92%);
+      }
+    }
+  }
+
+  .delta {
+    font-variant-numeric: tabular-nums;
+
+    &.up {
+      color: color-mix(in oklch, var(--good), black 8%);
+    }
+
+    &.down {
+      color: color-mix(in oklch, var(--bad), black 8%);
+    }
+  }
+}

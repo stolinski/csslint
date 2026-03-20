@@ -18,6 +18,37 @@ fn wave4_rules_cover_native_vue_and_svelte_cases() {
 }
 
 #[test]
+fn vue_style_src_blocks_emit_warning_and_skip_framework_rules() {
+    let diagnostics = lint_source(
+        "Fixture.vue",
+        "<template><div class=\"card\"></div></template>\n<style src=\"./external.css\"></style>\n",
+        FileId::new(943),
+    );
+
+    assert!(
+        diagnostics.iter().any(|diagnostic| {
+            diagnostic
+                .message
+                .to_ascii_lowercase()
+                .contains("style src")
+        }),
+        "style src should emit a non-fatal extraction warning"
+    );
+    assert!(
+        diagnostics
+            .iter()
+            .all(|diagnostic| diagnostic.rule_id.as_str() != "no_global_leaks"),
+        "style src blocks should be skipped for no_global_leaks"
+    );
+    assert!(
+        diagnostics
+            .iter()
+            .all(|diagnostic| diagnostic.rule_id.as_str() != "prefer_logical_properties"),
+        "style src blocks should be skipped for prefer_logical_properties"
+    );
+}
+
+#[test]
 fn prefer_logical_properties_also_runs_for_plain_css() {
     let diagnostics = lint_source(
         "fixture.css",
@@ -69,6 +100,12 @@ fn run_native_case(path: &str, source: &str, file_id: FileId) {
         logical.iter().all(|diagnostic| diagnostic.fix.is_some()),
         "{path} prefer_logical_properties diagnostics should include fixes"
     );
+
+    assert_eq!(
+        leaks.len() + logical.len(),
+        2,
+        "{path} fixture should emit exactly one framework diagnostic per wave4 rule"
+    );
 }
 
 fn lint_source(path: &str, source: &str, file_id: FileId) -> Vec<Diagnostic> {
@@ -76,9 +113,12 @@ fn lint_source(path: &str, source: &str, file_id: FileId) -> Vec<Diagnostic> {
     let mut diagnostics = extraction.diagnostics;
 
     for style in extraction.styles {
-        if let Ok(parsed) = csslint_parser::parse_style(&style) {
-            let semantic = csslint_semantic::build_semantic_model(&parsed);
-            diagnostics.extend(csslint_rules::run_rules(&semantic));
+        match csslint_parser::parse_style(&style) {
+            Ok(parsed) => {
+                let semantic = csslint_semantic::build_semantic_model(&parsed);
+                diagnostics.extend(csslint_rules::run_rules(&semantic));
+            }
+            Err(diagnostic) => diagnostics.push(*diagnostic),
         }
     }
 

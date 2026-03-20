@@ -650,6 +650,31 @@ mod tests {
     }
 
     #[test]
+    fn explicit_config_path_must_exist() {
+        let fixture = TempFixture::new("config-explicit-missing");
+        let missing_path = fixture.path().join("missing.csslint");
+
+        let diagnostics = load_for_target(fixture.path(), Some(&missing_path))
+            .expect_err("missing config should fail");
+        assert_eq!(diagnostics.len(), 1);
+        assert_eq!(diagnostics[0].file_path.as_ref(), Some(&missing_path));
+        assert!(diagnostics[0].message.contains("does not exist"));
+    }
+
+    #[test]
+    fn explicit_config_path_must_be_file() {
+        let fixture = TempFixture::new("config-explicit-directory");
+        fixture.write("config-dir/placeholder.txt", "ok");
+        let directory_path = fixture.path().join("config-dir");
+
+        let diagnostics = load_for_target(fixture.path(), Some(&directory_path))
+            .expect_err("directory config should fail");
+        assert_eq!(diagnostics.len(), 1);
+        assert_eq!(diagnostics[0].file_path.as_ref(), Some(&directory_path));
+        assert!(diagnostics[0].message.contains("must point to a file"));
+    }
+
+    #[test]
     fn load_reports_invalid_json_and_unknown_keys() {
         let fixture = TempFixture::new("config-errors");
         let config_path = fixture.path().join(config_file_name());
