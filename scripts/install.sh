@@ -120,9 +120,9 @@ for candidate in "${ASSETS[@]}"; do
     base_url="https://github.com/${REPO}/releases/download/${VERSION}/${candidate}"
   fi
 
-  if download "$base_url" "$TMP_DIR/$candidate"; then
+  if download "$base_url" "$TMP_DIR/$candidate" 2>/dev/null; then
     selected_asset="$candidate"
-    if download "${base_url}.sha256" "$TMP_DIR/${candidate}.sha256"; then
+    if download "${base_url}.sha256" "$TMP_DIR/${candidate}.sha256" 2>/dev/null; then
       :
     else
       echo "Warning: checksum file not found for $candidate" >&2
