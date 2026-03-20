@@ -17,118 +17,118 @@
   "corpora": [
     {
       "corpusId": "css-only",
-      "files": 20,
-      "totalBytes": 849,
-      "corpusDigest": "e244fa85a301d11d",
+      "files": 30,
+      "totalBytes": 10639,
+      "corpusDigest": "0b088659811f0c53",
       "csslint": {
-        "totalMs": 46.894875,
-        "filesPerSecond": 426.4858366719178,
-        "mbPerSecond": 0.017265628592226898,
-        "p50FileMs": 0.028042,
-        "p95FileMs": 0.051417,
-        "peakRssBytes": 3883008,
-        "parseMs": 0.20950100000000002,
-        "semanticMs": 0.10441700000000005,
-        "rulesMs": 0.21575099999999997
+        "totalMs": 63.937375,
+        "filesPerSecond": 469.2091284635942,
+        "mbPerSecond": 0.15868873334643616,
+        "p50FileMs": 0.026,
+        "p95FileMs": 0.39179200000000003,
+        "peakRssBytes": 5439488,
+        "parseMs": 0.8089580000000001,
+        "semanticMs": 0.30208399999999996,
+        "rulesMs": 0.352998
       },
       "stylelint": {
-        "totalMs": 237.517875,
-        "filesPerSecond": 84.20418884262921,
-        "mbPerSecond": 0.003408878151292429,
-        "p50FileMs": 11.87589375,
-        "p95FileMs": 11.87589375,
-        "peakRssBytes": 54329344
+        "totalMs": 246.23425,
+        "filesPerSecond": 121.83520367292526,
+        "mbPerSecond": 0.041205238719821034,
+        "p50FileMs": 8.207808333333334,
+        "p95FileMs": 8.207808333333334,
+        "peakRssBytes": 59572224
       },
       "ratios": {
-        "runtime": 5.064900482195549,
-        "throughput": 5.06490048219555
+        "runtime": 3.8511785946795594,
+        "throughput": 3.8511785946795594
       }
     },
     {
       "corpusId": "mixed",
-      "files": 50,
-      "totalBytes": 4305,
-      "corpusDigest": "9aeba73f6fc59600",
+      "files": 61,
+      "totalBytes": 11519,
+      "corpusDigest": "e0b92c75b82efbbd",
       "csslint": {
-        "totalMs": 112.953416,
-        "filesPerSecond": 442.6603618610348,
-        "mbPerSecond": 0.03634744372962484,
-        "p50FileMs": 0.0265,
-        "p95FileMs": 0.04025,
-        "peakRssBytes": 4046848,
-        "parseMs": 0.474005,
-        "semanticMs": 0.247752,
-        "rulesMs": 0.520456
+        "totalMs": 139.227125,
+        "filesPerSecond": 438.13301466937565,
+        "mbPerSecond": 0.07890254467786786,
+        "p50FileMs": 0.030375,
+        "p95FileMs": 0.056458,
+        "peakRssBytes": 5537792,
+        "parseMs": 1.2234150000000004,
+        "semanticMs": 0.40612699999999996,
+        "rulesMs": 0.6641229999999999
       },
       "stylelint": {
-        "totalMs": 376.248,
-        "filesPerSecond": 132.8910718462291,
-        "mbPerSecond": 0.010911866460762334,
-        "p50FileMs": 7.52496,
-        "p95FileMs": 7.52496,
-        "peakRssBytes": 59441152
+        "totalMs": 391.453208,
+        "filesPerSecond": 155.82960812011024,
+        "mbPerSecond": 0.02806305894594583,
+        "p50FileMs": 6.417265704918033,
+        "p95FileMs": 6.417265704918033,
+        "peakRssBytes": 59899904
       },
       "ratios": {
-        "runtime": 3.3310015165898124,
-        "throughput": 3.331001516589812
+        "runtime": 2.811615969230134,
+        "throughput": 2.8116159692301337
       }
     },
     {
       "corpusId": "svelte-heavy",
-      "files": 15,
-      "totalBytes": 1784,
-      "corpusDigest": "5ab87650746a31ed",
+      "files": 16,
+      "totalBytes": 3732,
+      "corpusDigest": "a9c8dca665bc3424",
       "csslint": {
-        "totalMs": 33.683459,
-        "filesPerSecond": 445.3224355610272,
-        "mbPerSecond": 0.05051010291041517,
-        "p50FileMs": 0.023917,
-        "p95FileMs": 0.049542,
-        "peakRssBytes": 4096000,
-        "parseMs": 0.12754,
-        "semanticMs": 0.07470900000000001,
-        "rulesMs": 0.17849900000000002
+        "totalMs": 33.971125,
+        "filesPerSecond": 470.98822897387123,
+        "mbPerSecond": 0.10476875725570246,
+        "p50FileMs": 0.026583,
+        "p95FileMs": 0.057042,
+        "peakRssBytes": 5554176,
+        "parseMs": 0.296376,
+        "semanticMs": 0.094749,
+        "rulesMs": 0.145501
       },
       "stylelint": {
-        "totalMs": 297.996334,
-        "filesPerSecond": 50.33618970628008,
-        "mbPerSecond": 0.005709315136973296,
-        "p50FileMs": 19.866422266666667,
-        "p95FileMs": 19.866422266666667,
-        "peakRssBytes": 59473920
+        "totalMs": 293.1965,
+        "filesPerSecond": 54.57091063501781,
+        "mbPerSecond": 0.012139000802629378,
+        "p50FileMs": 18.32478125,
+        "p95FileMs": 18.32478125,
+        "peakRssBytes": 59949056
       },
       "ratios": {
-        "runtime": 8.846963549675822,
-        "throughput": 8.846963549675822
+        "runtime": 8.630756267271101,
+        "throughput": 8.630756267271103
       }
     },
     {
       "corpusId": "vue-heavy",
-      "files": 18,
-      "totalBytes": 2577,
-      "corpusDigest": "0fdaf7100ddf22db",
+      "files": 19,
+      "totalBytes": 4830,
+      "corpusDigest": "602936168c014317",
       "csslint": {
-        "totalMs": 41.40675,
-        "filesPerSecond": 434.7117317828615,
-        "mbPerSecond": 0.05935309371971735,
-        "p50FileMs": 0.030083,
-        "p95FileMs": 0.042917000000000004,
-        "peakRssBytes": 4161536,
-        "parseMs": 0.18241600000000002,
-        "semanticMs": 0.10329300000000005,
-        "rulesMs": 0.196415
+        "totalMs": 41.618750000000006,
+        "filesPerSecond": 456.5250037543174,
+        "mbPerSecond": 0.1106772055441883,
+        "p50FileMs": 0.031416,
+        "p95FileMs": 0.059166,
+        "peakRssBytes": 5554176,
+        "parseMs": 0.567707,
+        "semanticMs": 0.14125100000000004,
+        "rulesMs": 0.210958
       },
       "stylelint": {
-        "totalMs": 309.100458,
-        "filesPerSecond": 58.233495079454066,
-        "mbPerSecond": 0.007950873736262487,
-        "p50FileMs": 17.172247666666667,
-        "p95FileMs": 17.172247666666667,
-        "peakRssBytes": 59490304
+        "totalMs": 325.62875,
+        "filesPerSecond": 58.34865625347884,
+        "mbPerSecond": 0.014145701042190493,
+        "p50FileMs": 17.138355263157894,
+        "p95FileMs": 17.138355263157894,
+        "peakRssBytes": 60309504
       },
       "ratios": {
-        "runtime": 7.4649775217808685,
-        "throughput": 7.464977521780869
+        "runtime": 7.8240877008559835,
+        "throughput": 7.824087700855984
       }
     }
   ]
