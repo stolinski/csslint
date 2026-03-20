@@ -24,9 +24,13 @@ jobs:
             artifact_name: csslint-linux-x86_64
             archive_name: csslint-linux-x86_64.tar.gz
             binary_path: target/release/csslint
-          - os: macos-latest
+          - os: macos-13
             artifact_name: csslint-macos-x86_64
             archive_name: csslint-macos-x86_64.tar.gz
+            binary_path: target/release/csslint
+          - os: macos-latest
+            artifact_name: csslint-macos-arm64
+            archive_name: csslint-macos-arm64.tar.gz
             binary_path: target/release/csslint
           - os: windows-latest
             artifact_name: csslint-windows-x86_64

@@ -30,7 +30,19 @@ Exit codes:
 
 ## Install
 
-From this repo clone (works now):
+From release binaries (no build):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/stolinski/csslint/main/scripts/install.sh | bash
+```
+
+Install a specific tag (including prereleases):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/stolinski/csslint/main/scripts/install.sh | bash -s -- --version v0.1.0-alpha.1
+```
+
+From this repo clone (build from source):
 
 ```bash
 cargo install --path crates/csslint-cli --force
@@ -48,6 +60,7 @@ From GitHub Releases (after a tagged release):
 1. Open the repo's latest release page.
 2. Download the archive for your platform:
    - `csslint-linux-x86_64.tar.gz`
+   - `csslint-macos-arm64.tar.gz`
    - `csslint-macos-x86_64.tar.gz`
    - `csslint-windows-x86_64.zip`
 3. Verify checksum with the matching `.sha256` file.
