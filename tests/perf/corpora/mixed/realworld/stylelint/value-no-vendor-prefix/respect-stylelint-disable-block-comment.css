@@ -1,0 +1,3 @@
+/* stylelint-disable value-no-vendor-prefix */
+a { display: -webkit-flex; }
+/* stylelint-enable value-no-vendor-prefix */

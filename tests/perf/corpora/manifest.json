@@ -3,9 +3,9 @@
   "corpora": [
     {
       "corpusId": "css-only",
-      "files": 18,
-      "totalBytes": 454,
-      "digest": "024f3f5c986c3bd6"
+      "files": 26,
+      "totalBytes": 1272,
+      "digest": "9708b195ad30ca09"
     },
     {
       "corpusId": "vue-heavy",
@@ -21,9 +21,9 @@
     },
     {
       "corpusId": "mixed",
-      "files": 47,
-      "totalBytes": 3983,
-      "digest": "d0a560f3c5d541f5"
+      "files": 55,
+      "totalBytes": 4801,
+      "digest": "d6bca893139dd629"
     }
   ]
 }
