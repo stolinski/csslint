@@ -22,20 +22,27 @@ use serde::Serialize;
 
 fn main() {
     let exit_code = match parse_cli_options(env::args()) {
-        Ok(options) => match run_lint(&options) {
-            Ok(result) => {
-                print_result(&result, options.format, options.code_frame, options.profile);
-                result.exit_code()
-            }
-            Err(error) => {
-                if options.format == OutputFormat::Json {
-                    print_json_error(&error);
-                } else {
-                    eprintln!("{error}");
+        Ok(options) => {
+            if options.version {
+                print_version();
+                0
+            } else {
+                match run_lint(&options) {
+                    Ok(result) => {
+                        print_result(&result, options.format, options.code_frame, options.profile);
+                        result.exit_code()
+                    }
+                    Err(error) => {
+                        if options.format == OutputFormat::Json {
+                            print_json_error(&error);
+                        } else {
+                            eprintln!("{error}");
+                        }
+                        2
+                    }
                 }
-                2
             }
-        },
+        }
         Err(error) => {
             eprintln!("{error}");
             2
@@ -58,10 +65,15 @@ struct CliOptions {
     ignore_path: Option<PathBuf>,
     targets_override: Option<String>,
     rule_filters: Vec<String>,
+    version: bool,
     code_frame: bool,
     profile: bool,
     fix: bool,
     format: OutputFormat,
+}
+
+fn print_version() {
+    println!("csslint {}", env!("CARGO_PKG_VERSION"));
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -267,6 +279,7 @@ where
     let mut ignore_path: Option<PathBuf> = None;
     let mut targets_override: Option<String> = None;
     let mut rule_filters: Vec<String> = Vec::new();
+    let mut version = false;
     let mut code_frame = false;
     let mut profile = false;
     let mut fix = false;
@@ -352,9 +365,12 @@ where
 
                 rule_filters.push(value);
             }
+            "--version" | "-v" => {
+                version = true;
+            }
             "-h" | "--help" => {
                 return Err(CliError::usage(
-                    "usage: csslint [path] [--config <path>] [--ignore-path <path>] [--targets <profile>] [--rule <rule_id>]... [--code-frame] [--profile] [--fix] [--format json|pretty]",
+                    "usage: csslint [path] [--config <path>] [--ignore-path <path>] [--targets <profile>] [--rule <rule_id>]... [--code-frame] [--profile] [--fix] [--format json|pretty] [--version|-v]",
                 ));
             }
             _ if arg.starts_with('-') => {
@@ -379,6 +395,7 @@ where
         ignore_path,
         targets_override,
         rule_filters,
+        version,
         code_frame,
         profile,
         fix,
@@ -1350,6 +1367,7 @@ mod tests {
                 ignore_path: None,
                 targets_override: None,
                 rule_filters: Vec::new(),
+                version: false,
                 code_frame: false,
                 profile: false,
                 fix: true,
@@ -1440,6 +1458,22 @@ mod tests {
                 "no_unknown_properties".to_string()
             ]
         );
+    }
+
+    #[test]
+    fn parse_cli_options_accepts_long_version_flag() {
+        let parsed = parse_cli_options(["csslint".to_string(), "--version".to_string()])
+            .expect("--version should parse");
+
+        assert!(parsed.version);
+    }
+
+    #[test]
+    fn parse_cli_options_accepts_short_version_flag() {
+        let parsed =
+            parse_cli_options(["csslint".to_string(), "-v".to_string()]).expect("-v should parse");
+
+        assert!(parsed.version);
     }
 
     #[test]

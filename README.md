@@ -13,7 +13,7 @@ It is currently in active development toward a scoped v1.
 ## Current CLI
 
 ```bash
-csslint [path] [--config <path>] [--ignore-path <path>] [--targets <profile>] [--rule <rule_id>]... [--code-frame] [--profile] [--fix] [--format json|pretty]
+csslint [path] [--config <path>] [--ignore-path <path>] [--targets <profile>] [--rule <rule_id>]... [--code-frame] [--profile] [--fix] [--format json|pretty] [--version|-v]
 ```
 
 If `path` is omitted, csslint defaults to `.`.
@@ -24,6 +24,7 @@ Core v1 commands:
 - `csslint <path> --fix`
 - `csslint <path> --format json`
 - `csslint <path> --rule <rule_id>`
+- `csslint --version`
 
 Exit codes:
 
@@ -83,6 +84,9 @@ Quick try from extracted binary:
 ```bash
 # lint
 csslint .
+
+# print version
+csslint --version
 
 # run only selected rule(s)
 csslint . --rule no_duplicate_selectors

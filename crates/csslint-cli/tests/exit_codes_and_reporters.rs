@@ -22,6 +22,36 @@ fn exits_zero_when_no_error_diagnostics_are_reported() {
 }
 
 #[test]
+fn long_version_flag_prints_version_and_exits_zero() {
+    let fixture = TempFixture::new("cli-version-long");
+
+    let output = run_csslint(fixture.path(), &["--version"]);
+    assert_eq!(output.status.code(), Some(0));
+
+    let stdout = normalize_line_endings(&output.stdout);
+    assert_eq!(
+        stdout.trim(),
+        format!("csslint {}", env!("CARGO_PKG_VERSION"))
+    );
+    assert!(output.stderr.is_empty());
+}
+
+#[test]
+fn short_version_flag_prints_version_and_exits_zero() {
+    let fixture = TempFixture::new("cli-version-short");
+
+    let output = run_csslint(fixture.path(), &["-v"]);
+    assert_eq!(output.status.code(), Some(0));
+
+    let stdout = normalize_line_endings(&output.stdout);
+    assert_eq!(
+        stdout.trim(),
+        format!("csslint {}", env!("CARGO_PKG_VERSION"))
+    );
+    assert!(output.stderr.is_empty());
+}
+
+#[test]
 fn exits_one_when_error_diagnostics_exist() {
     let fixture = TempFixture::new("cli-exit-one");
     fixture.write("main.css", ".app { colr: red; }\n");
