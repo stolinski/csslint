@@ -9,11 +9,13 @@ Provide a predictable, low-friction CLI and config system that supports local de
 - `csslint <path>`
 - `csslint <path> --fix`
 - `csslint <path> --format json`
+- `csslint <path> --rule <rule_id>`
 
 Recommended optional flags:
 
 - `--config <path>`
 - `--ignore-path <path>`
+- `--rule <rule_id>` (repeatable)
 - `--max-warnings <n>`
 - `--quiet` (errors only)
 - `--targets <query or preset>`

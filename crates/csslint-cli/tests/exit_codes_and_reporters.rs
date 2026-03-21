@@ -149,6 +149,35 @@ fn json_reporter_always_includes_fix_object() {
 }
 
 #[test]
+fn rule_filter_limits_diagnostics_to_selected_rule_in_e2e() {
+    let fixture = TempFixture::new("cli-rule-filter-e2e");
+    fixture.write("main.css", ".dup, .dup { color: red; }\n.empty {}\n");
+
+    let output = run_csslint(
+        fixture.path(),
+        &[
+            "main.css",
+            "--rule",
+            "no_duplicate_selectors",
+            "--format",
+            "json",
+        ],
+    );
+    assert_eq!(output.status.code(), Some(1));
+
+    let value: Value =
+        serde_json::from_slice(&output.stdout).expect("rule-filtered run should emit valid json");
+    let diagnostics = value["diagnostics"]
+        .as_array()
+        .expect("diagnostics should be an array");
+
+    assert_eq!(diagnostics.len(), 1);
+    assert!(diagnostics
+        .iter()
+        .all(|diagnostic| diagnostic["ruleId"] == "no_duplicate_selectors"));
+}
+
+#[test]
 fn discovery_honors_csslintignore_and_ignore_path_override_in_e2e() {
     let fixture = TempFixture::new("cli-ignore-e2e");
     fixture.write(".csslintignore", "ignored-default.css\n");

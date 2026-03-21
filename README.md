@@ -13,7 +13,7 @@ It is currently in active development toward a scoped v1.
 ## Current CLI
 
 ```bash
-csslint [path] [--config <path>] [--ignore-path <path>] [--targets <profile>] [--code-frame] [--profile] [--fix] [--format json|pretty]
+csslint [path] [--config <path>] [--ignore-path <path>] [--targets <profile>] [--rule <rule_id>]... [--code-frame] [--profile] [--fix] [--format json|pretty]
 ```
 
 If `path` is omitted, csslint defaults to `.`.
@@ -23,6 +23,7 @@ Core v1 commands:
 - `csslint <path>`
 - `csslint <path> --fix`
 - `csslint <path> --format json`
+- `csslint <path> --rule <rule_id>`
 
 Exit codes:
 
@@ -81,6 +82,9 @@ Quick try from extracted binary:
 # lint
 csslint .
 
+# run only selected rule(s)
+csslint . --rule no_duplicate_selectors
+
 # apply safe fixes
 csslint . --fix
 
@@ -96,6 +100,19 @@ v1 config file:
 - format: JSON only
 
 See `docs/plan/08-cli-and-config.md` and `docs/rule-catalog-v1.md` for canonical rule and preset behavior.
+
+Default rules enabled by v1 (`recommended` preset):
+
+- `no_unknown_properties` (`error`)
+- `no_invalid_values` (`error`)
+- `no_duplicate_selectors` (`error`)
+- `no_duplicate_declarations` (`error`)
+- `no_empty_rules` (`warn`)
+- `no_legacy_vendor_prefixes` (`warn`)
+- `no_overqualified_selectors` (`warn`)
+- `prefer_logical_properties` (`warn`)
+- `no_global_leaks` (`error`)
+- `no_deprecated_features` (`warn`)
 
 ## Documentation
 

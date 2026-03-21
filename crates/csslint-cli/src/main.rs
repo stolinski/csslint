@@ -8,8 +8,10 @@ use std::io::IsTerminal;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
-use csslint_config::{format_diagnostics, load_for_target, parse_target_profile};
-use csslint_core::{Diagnostic, FileId, LineIndex};
+use csslint_config::{
+    canonical_rule_id_order, format_diagnostics, load_for_target, parse_target_profile,
+};
+use csslint_core::{Diagnostic, FileId, LineIndex, RuleId, Severity};
 use csslint_extractor::extract_styles;
 use csslint_fix::apply_fixes;
 use csslint_parser::{parse_style_with_options, CssParserOptions};
@@ -55,6 +57,7 @@ struct CliOptions {
     config_path: Option<PathBuf>,
     ignore_path: Option<PathBuf>,
     targets_override: Option<String>,
+    rule_filters: Vec<String>,
     code_frame: bool,
     profile: bool,
     fix: bool,
@@ -263,6 +266,7 @@ where
     let mut config_path: Option<PathBuf> = None;
     let mut ignore_path: Option<PathBuf> = None;
     let mut targets_override: Option<String> = None;
+    let mut rule_filters: Vec<String> = Vec::new();
     let mut code_frame = false;
     let mut profile = false;
     let mut fix = false;
@@ -332,9 +336,25 @@ where
                 }
                 targets_override = Some(value);
             }
+            "--rule" => {
+                let Some(value) = args.next() else {
+                    return Err(CliError::usage(
+                        "missing value for --rule (expected core rule id, e.g. no_duplicate_selectors)",
+                    ));
+                };
+
+                if !is_known_rule_filter(&value) {
+                    return Err(CliError::usage(format!(
+                        "unknown rule id '{value}' for --rule (expected one of: {})",
+                        canonical_rule_id_order().join(", ")
+                    )));
+                }
+
+                rule_filters.push(value);
+            }
             "-h" | "--help" => {
                 return Err(CliError::usage(
-                    "usage: csslint [path] [--config <path>] [--ignore-path <path>] [--targets <profile>] [--code-frame] [--profile] [--fix] [--format json|pretty]",
+                    "usage: csslint [path] [--config <path>] [--ignore-path <path>] [--targets <profile>] [--rule <rule_id>]... [--code-frame] [--profile] [--fix] [--format json|pretty]",
                 ));
             }
             _ if arg.starts_with('-') => {
@@ -358,6 +378,7 @@ where
         config_path,
         ignore_path,
         targets_override,
+        rule_filters,
         code_frame,
         profile,
         fix,
@@ -365,11 +386,47 @@ where
     })
 }
 
+fn is_known_rule_filter(rule_id: &str) -> bool {
+    canonical_rule_id_order()
+        .iter()
+        .any(|known_rule_id| *known_rule_id == rule_id)
+}
+
+fn apply_rule_filters(config: &mut csslint_config::Config, rule_filters: &[String]) {
+    if rule_filters.is_empty() {
+        return;
+    }
+
+    let selected = rule_filters
+        .iter()
+        .map(String::as_str)
+        .collect::<BTreeSet<_>>();
+    let existing_rules = config.rules.clone();
+    let mut filtered_rules = BTreeMap::new();
+
+    for &known_rule_id in canonical_rule_id_order() {
+        let rule_id = RuleId::from(known_rule_id);
+        if selected.contains(known_rule_id) {
+            if let Some(severity) = existing_rules.get(&rule_id).copied() {
+                if severity != Severity::Off {
+                    filtered_rules.insert(rule_id, severity);
+                }
+            }
+            continue;
+        }
+
+        filtered_rules.insert(rule_id, Severity::Off);
+    }
+
+    config.rules = filtered_rules;
+}
+
 fn run_lint(options: &CliOptions) -> Result<LintResult, CliError> {
     let run_started_at = Instant::now();
     let loaded_config = load_for_target(&options.target_path, options.config_path.as_deref())
         .map_err(|diagnostics| CliError::config(format_diagnostics(&diagnostics)))?;
-    let config = loaded_config.config;
+    let mut config = loaded_config.config;
+    apply_rule_filters(&mut config, &options.rule_filters);
     let target_profile = match options.targets_override.as_deref() {
         Some(raw_targets) => parse_target_profile(raw_targets).map_err(CliError::usage)?,
         None => loaded_config.targets,
@@ -1292,6 +1349,7 @@ mod tests {
                 config_path: None,
                 ignore_path: None,
                 targets_override: None,
+                rule_filters: Vec::new(),
                 code_frame: false,
                 profile: false,
                 fix: true,
@@ -1345,6 +1403,43 @@ mod tests {
         .expect("targets override should parse");
 
         assert_eq!(parsed.targets_override.as_deref(), Some("defaults"));
+    }
+
+    #[test]
+    fn parse_cli_options_accepts_single_rule_filter() {
+        let parsed = parse_cli_options([
+            "csslint".to_string(),
+            "src".to_string(),
+            "--rule".to_string(),
+            "no_duplicate_selectors".to_string(),
+        ])
+        .expect("single --rule filter should parse");
+
+        assert_eq!(
+            parsed.rule_filters,
+            vec!["no_duplicate_selectors".to_string()]
+        );
+    }
+
+    #[test]
+    fn parse_cli_options_accepts_multiple_rule_filters() {
+        let parsed = parse_cli_options([
+            "csslint".to_string(),
+            "src".to_string(),
+            "--rule".to_string(),
+            "no_duplicate_selectors".to_string(),
+            "--rule".to_string(),
+            "no_unknown_properties".to_string(),
+        ])
+        .expect("multiple --rule filters should parse");
+
+        assert_eq!(
+            parsed.rule_filters,
+            vec![
+                "no_duplicate_selectors".to_string(),
+                "no_unknown_properties".to_string()
+            ]
+        );
     }
 
     #[test]
@@ -1411,6 +1506,33 @@ mod tests {
 
         assert_eq!(error.kind, CliErrorKind::Usage);
         assert!(error.message.contains("missing value for --targets"));
+    }
+
+    #[test]
+    fn parse_cli_options_requires_rule_value() {
+        let error = parse_cli_options([
+            "csslint".to_string(),
+            "src".to_string(),
+            "--rule".to_string(),
+        ])
+        .expect_err("--rule without value should fail");
+
+        assert_eq!(error.kind, CliErrorKind::Usage);
+        assert!(error.message.contains("missing value for --rule"));
+    }
+
+    #[test]
+    fn parse_cli_options_rejects_unknown_rule_filter() {
+        let error = parse_cli_options([
+            "csslint".to_string(),
+            "src".to_string(),
+            "--rule".to_string(),
+            "no_not_real".to_string(),
+        ])
+        .expect_err("unknown --rule id should fail");
+
+        assert_eq!(error.kind, CliErrorKind::Usage);
+        assert!(error.message.contains("unknown rule id 'no_not_real'"));
     }
 
     #[test]
