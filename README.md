@@ -39,10 +39,12 @@ From release binaries (no build):
 curl -fsSL https://raw.githubusercontent.com/stolinski/csslint/main/scripts/install.sh | bash
 ```
 
+The installer prefers the latest stable release and falls back to the newest tag when a stable asset for your platform is unavailable.
+
 Install a specific tag (including prereleases):
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/stolinski/csslint/main/scripts/install.sh | bash -s -- --version v0.1.0-alpha.1
+curl -fsSL https://raw.githubusercontent.com/stolinski/csslint/main/scripts/install.sh | bash -s -- --version v0.1.0-alpha.3
 ```
 
 From this repo clone (build from source):

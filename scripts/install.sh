@@ -13,7 +13,7 @@ Usage:
   install.sh [--version <tag>] [--install-dir <dir>] [--repo <owner/name>]
 
 Options:
-  --version <tag>      Release tag to install (default: latest stable release)
+  --version <tag>      Release tag to install (default: latest stable release, with prerelease fallback)
   --install-dir <dir>  Destination directory for binary
   --repo <owner/name>  GitHub repo (default: stolinski/csslint)
   -h, --help           Show this help
@@ -113,32 +113,62 @@ download() {
 }
 
 selected_asset=""
-for candidate in "${ASSETS[@]}"; do
-  if [[ "$VERSION" == "latest" ]]; then
-    base_url="https://github.com/${REPO}/releases/latest/download/${candidate}"
-  else
-    base_url="https://github.com/${REPO}/releases/download/${VERSION}/${candidate}"
+selected_version="$VERSION"
+fallback_tag=""
+
+resolve_newest_release_tag() {
+  local releases_url="https://api.github.com/repos/${REPO}/releases?per_page=1"
+  local releases_file="$TMP_DIR/releases.json"
+  if ! download "$releases_url" "$releases_file" 2>/dev/null; then
+    return 1
   fi
 
-  if download "$base_url" "$TMP_DIR/$candidate" 2>/dev/null; then
-    selected_asset="$candidate"
-    if download "${base_url}.sha256" "$TMP_DIR/${candidate}.sha256" 2>/dev/null; then
-      :
+  awk -F '"' '/"tag_name"[[:space:]]*:/ { print $4; exit }' "$releases_file"
+}
+
+attempt_download_for_version() {
+  local version="$1"
+  selected_asset=""
+
+  for candidate in "${ASSETS[@]}"; do
+    local base_url
+    if [[ "$version" == "latest" ]]; then
+      base_url="https://github.com/${REPO}/releases/latest/download/${candidate}"
     else
-      echo "Warning: checksum file not found for $candidate" >&2
-      rm -f "$TMP_DIR/$candidate"
-      selected_asset=""
-      continue
+      base_url="https://github.com/${REPO}/releases/download/${version}/${candidate}"
     fi
-    break
+
+    if download "$base_url" "$TMP_DIR/$candidate" 2>/dev/null; then
+      selected_asset="$candidate"
+      if download "${base_url}.sha256" "$TMP_DIR/${candidate}.sha256" 2>/dev/null; then
+        :
+      else
+        echo "Warning: checksum file not found for $candidate" >&2
+        rm -f "$TMP_DIR/$candidate"
+        selected_asset=""
+        continue
+      fi
+      break
+    fi
+  done
+
+  [[ -n "$selected_asset" ]]
+}
+
+if ! attempt_download_for_version "$selected_version"; then
+  if [[ "$VERSION" == "latest" ]]; then
+    fallback_tag="$(resolve_newest_release_tag || true)"
+    if [[ -n "$fallback_tag" ]]; then
+      echo "Latest stable release does not include ${OS_SLUG}/${ARCH_SLUG}; trying newest tag ${fallback_tag}" >&2
+      selected_version="$fallback_tag"
+      attempt_download_for_version "$selected_version" || true
+    fi
   fi
-done
+fi
 
 if [[ -z "$selected_asset" ]]; then
   echo "Could not download a matching release asset for ${OS_SLUG}/${ARCH_SLUG}" >&2
-  if [[ "$VERSION" == "latest" ]]; then
-    echo "Tip: this uses the latest stable release. Use --version for prerelease tags." >&2
-  fi
+  echo "Tip: pass --version <tag> to install an explicit release." >&2
   exit 1
 fi
 
