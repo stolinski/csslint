@@ -174,7 +174,7 @@ checksum = "25670139e591f1c2869eb8d0d977028f8d05e859132b4c874ecd02a00d3c9174"
 
 [[package]]
 name = "csslint-cli"
-version = "0.1.0"
+version = "0.1.0-alpha.6"
 dependencies = [
  "csslint-config",
  "csslint-core",
@@ -191,7 +191,7 @@ dependencies = [
 
 [[package]]
 name = "csslint-config"
-version = "0.1.0"
+version = "0.1.0-alpha.6"
 dependencies = [
  "csslint-core",
  "serde_json",
@@ -199,25 +199,25 @@ dependencies = [
 
 [[package]]
 name = "csslint-core"
-version = "0.1.0"
+version = "0.1.0-alpha.6"
 
 [[package]]
 name = "csslint-extractor"
-version = "0.1.0"
+version = "0.1.0-alpha.6"
 dependencies = [
  "csslint-core",
 ]
 
 [[package]]
 name = "csslint-fix"
-version = "0.1.0"
+version = "0.1.0-alpha.6"
 dependencies = [
  "csslint-core",
 ]
 
 [[package]]
 name = "csslint-parser"
-version = "0.1.0"
+version = "0.1.0-alpha.6"
 dependencies = [
  "css_dataset",
  "csslint-core",
@@ -227,11 +227,11 @@ dependencies = [
 
 [[package]]
 name = "csslint-plugin-api"
-version = "0.1.0"
+version = "0.1.0-alpha.6"
 
 [[package]]
 name = "csslint-rules"
-version = "0.1.0"
+version = "0.1.0-alpha.6"
 dependencies = [
  "csslint-config",
  "csslint-core",
@@ -240,7 +240,7 @@ dependencies = [
 
 [[package]]
 name = "csslint-semantic"
-version = "0.1.0"
+version = "0.1.0-alpha.6"
 dependencies = [
  "csslint-core",
  "csslint-extractor",
@@ -249,7 +249,7 @@ dependencies = [
 
 [[package]]
 name = "csslint-test-harness"
-version = "0.1.0"
+version = "0.1.0-alpha.6"
 dependencies = [
  "csslint-config",
  "csslint-core",

@@ -8,6 +8,8 @@ use csslint_config::Config;
 use csslint_core::{Diagnostic, FileId, Fix, RuleId, Scope, Severity, Span, TargetProfile};
 use csslint_semantic::{CssSemanticModel, DeclarationNode, RuleNode, SelectorNode};
 
+mod vendor_prefix_allowlist;
+
 pub type SelectorCallback = fn(&CssSemanticModel, &SelectorNode, &mut RuleRuntimeCtx);
 pub type DeclarationCallback = fn(&CssSemanticModel, &DeclarationNode, &mut RuleRuntimeCtx);
 pub type RuleNodeCallback = fn(&CssSemanticModel, &RuleNode, &mut RuleRuntimeCtx);
@@ -1104,7 +1106,9 @@ fn no_legacy_vendor_prefixes_on_declaration(
     declaration: &DeclarationNode,
     ctx: &mut RuleRuntimeCtx,
 ) {
-    if let Some((prefix, unprefixed_property)) = strip_legacy_prefix(&declaration.property) {
+    if let Some(unprefixed_property) =
+        prefixed_property_variant(&declaration.property, &declaration.value)
+    {
         let message = format!(
             "Legacy vendor-prefixed property '{}' detected; use '{}'",
             declaration.property, unprefixed_property
@@ -1120,7 +1124,6 @@ fn no_legacy_vendor_prefixes_on_declaration(
         ) {
             ctx.report_with_fix(message, declaration.span, fix);
         } else {
-            let _ = prefix;
             ctx.report(message, declaration.span);
         }
     }
@@ -1135,7 +1138,7 @@ fn no_legacy_vendor_prefixes_on_declaration(
             semantic,
             declaration,
             prefixed_value,
-            &unprefixed_value,
+            unprefixed_value,
             "no_legacy_vendor_prefixes",
             301,
         ) {
@@ -1172,27 +1175,78 @@ fn declaration_replacement_fix(
     })
 }
 
-fn strip_legacy_prefix(input: &str) -> Option<(&'static str, &str)> {
+fn prefixed_property_variant<'a>(property: &'a str, value: &str) -> Option<&'a str> {
+    let unprefixed_property = strip_legacy_prefix(property)?;
+    if !is_allowlisted_prefixed_property(unprefixed_property) {
+        return None;
+    }
+
+    if property.eq_ignore_ascii_case("-webkit-background-size")
+        && !webkit_background_size_rewrite_is_safe(value)
+    {
+        return None;
+    }
+
+    Some(unprefixed_property)
+}
+
+fn strip_legacy_prefix(input: &str) -> Option<&str> {
     LEGACY_PREFIXES.iter().find_map(|prefix| {
         input
             .strip_prefix(prefix)
             .filter(|suffix| !suffix.is_empty())
-            .map(|suffix| (*prefix, suffix))
     })
 }
 
-fn prefixed_value_variant(value: &str) -> Option<(&str, String)> {
+fn prefixed_value_variant(value: &str) -> Option<(&str, &str)> {
     let trimmed = value.trim();
-    for prefix in LEGACY_PREFIXES {
-        if let Some(suffix) = trimmed.strip_prefix(prefix) {
-            if suffix.is_empty() {
-                continue;
-            }
-            return Some((trimmed, suffix.to_string()));
-        }
+    if trimmed.is_empty() {
+        return None;
     }
 
-    None
+    let prefixed_value_end = trimmed
+        .find(|current: char| current.is_ascii_whitespace() || matches!(current, '(' | ',' | '!'))
+        .unwrap_or(trimmed.len());
+    if prefixed_value_end == 0 {
+        return None;
+    }
+
+    let prefixed_value = trimmed.get(..prefixed_value_end)?;
+    let unprefixed_value = strip_legacy_prefix(prefixed_value)?;
+    if !is_allowlisted_prefixed_value(prefixed_value) {
+        return None;
+    }
+
+    Some((prefixed_value, unprefixed_value))
+}
+
+fn is_allowlisted_prefixed_property(unprefixed_property: &str) -> bool {
+    let normalized_property = unprefixed_property.to_ascii_lowercase();
+    vendor_prefix_allowlist::is_autoprefixable_property(normalized_property.as_str())
+}
+
+fn is_allowlisted_prefixed_value(prefixed_value: &str) -> bool {
+    let normalized_value = prefixed_value.to_ascii_lowercase();
+    vendor_prefix_allowlist::is_autoprefixable_property_value(normalized_value.as_str())
+}
+
+fn webkit_background_size_rewrite_is_safe(value: &str) -> bool {
+    normalize_value_for_checks(value)
+        .split(',')
+        .all(|background| {
+            let mut tokens = background.split_whitespace();
+            let first = tokens.next();
+            let second = tokens.next();
+            let third = tokens.next();
+
+            match (first, second, third) {
+                (Some(_), Some(_), None) => true,
+                (Some(first), None, None) => {
+                    first.eq_ignore_ascii_case("auto") || is_css_wide_keyword(first)
+                }
+                _ => false,
+            }
+        })
 }
 
 fn selector_contains_overqualification(selector: &str) -> bool {
@@ -1627,6 +1681,109 @@ mod tests {
         fn create(&self, _ctx: RuleContext<'_>) -> RuleVisitor {
             RuleVisitor::empty()
         }
+    }
+
+    fn no_legacy_vendor_prefix_diagnostics(property: &str, value: &str) -> Vec<Diagnostic> {
+        let declaration_segment = format!("{property}: {value};");
+        let source = format!(".box {{ {declaration_segment} }}");
+        let declaration_start = source
+            .find(&declaration_segment)
+            .expect("declaration segment should be present in semantic source");
+        let declaration_end = declaration_start + declaration_segment.len();
+
+        let semantic = CssSemanticModel {
+            file_id: FileId::new(16),
+            span: Span::new(0, source.len()),
+            scope: Scope::Global,
+            source,
+            rules: vec![RuleNode {
+                id: RuleNodeId(0),
+                selector_ids: vec![],
+                declaration_ids: vec![DeclarationId(0)],
+                span: Span::new(0, declaration_end + 2),
+                is_at_rule: false,
+            }],
+            selectors: vec![],
+            declarations: vec![DeclarationNode {
+                id: DeclarationId(0),
+                rule_id: RuleNodeId(0),
+                property: property.to_string(),
+                property_known: true,
+                value: value.to_string(),
+                span: Span::new(declaration_start, declaration_end),
+            }],
+            at_rules: vec![],
+            indexes: SemanticIndexes::default(),
+        };
+
+        run_rules(&semantic)
+            .into_iter()
+            .filter(|diagnostic| diagnostic.rule_id.as_str() == "no_legacy_vendor_prefixes")
+            .collect()
+    }
+
+    #[test]
+    fn no_legacy_vendor_prefixes_reports_allowlisted_prefixed_property_and_fix() {
+        let diagnostics = no_legacy_vendor_prefix_diagnostics("-webkit-transform", "rotate(0)");
+        assert_eq!(diagnostics.len(), 1);
+        assert!(diagnostics[0].message.contains("use 'transform'"));
+
+        let fix = diagnostics[0]
+            .fix
+            .as_ref()
+            .expect("allowlisted prefixed property should include a fix");
+        assert!(fix.replacement.contains("transform: rotate(0);"));
+    }
+
+    #[test]
+    fn no_legacy_vendor_prefixes_ignores_non_allowlisted_prefixed_property() {
+        let diagnostics =
+            no_legacy_vendor_prefix_diagnostics("-webkit-overflow-scrolling", "touch");
+        assert!(
+            diagnostics.is_empty(),
+            "non-allowlisted prefixed properties should not be reported"
+        );
+    }
+
+    #[test]
+    fn no_legacy_vendor_prefixes_applies_background_size_safety_guard() {
+        let safe = no_legacy_vendor_prefix_diagnostics("-webkit-background-size", "auto");
+        assert_eq!(safe.len(), 1);
+        let safe_fix = safe[0]
+            .fix
+            .as_ref()
+            .expect("safe -webkit-background-size case should include a fix");
+        assert!(safe_fix.replacement.contains("background-size: auto;"));
+
+        let unsafe_case =
+            no_legacy_vendor_prefix_diagnostics("-webkit-background-size", "cover auto auto");
+        assert!(
+            unsafe_case.is_empty(),
+            "unsafe -webkit-background-size cases should not be rewritten"
+        );
+    }
+
+    #[test]
+    fn no_legacy_vendor_prefixes_reports_allowlisted_prefixed_value_and_fix() {
+        let diagnostics = no_legacy_vendor_prefix_diagnostics("display", "-webkit-flex !important");
+        assert_eq!(diagnostics.len(), 1);
+        assert!(diagnostics[0].message.contains("'-webkit-flex'"));
+        assert!(diagnostics[0].message.contains("use 'flex'"));
+
+        let fix = diagnostics[0]
+            .fix
+            .as_ref()
+            .expect("allowlisted prefixed values should include a fix");
+        assert!(fix.replacement.contains("display: flex !important;"));
+    }
+
+    #[test]
+    fn no_legacy_vendor_prefixes_ignores_non_allowlisted_prefixed_value() {
+        let diagnostics = no_legacy_vendor_prefix_diagnostics("display", "-webkit-box");
+        assert!(
+            diagnostics.is_empty(),
+            "non-allowlisted prefixed values should not be reported"
+        );
     }
 
     #[test]

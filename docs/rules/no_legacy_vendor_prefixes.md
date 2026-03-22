@@ -11,9 +11,10 @@ Disallow legacy vendor-prefixed properties and values when modern equivalents ar
 ## Algorithm Summary
 
 1. Visit declarations and declaration values.
-2. Match known prefixed property/value patterns.
-3. Check if an unprefixed equivalent exists in current lint policy.
-4. Report prefixed usage with replacement hint where safe.
+2. Match prefixed properties against an explicit allowlist snapshot from Stylelint `isAutoprefixable.mjs`.
+3. Match prefixed values against an explicit allowlist snapshot from Stylelint `isAutoprefixable.mjs`.
+4. Apply the `-webkit-background-size` safety guard before reporting/fixing property cases.
+5. Report only allowlisted prefixed usages with replacement hints/fixes.
 
 ## Config Options and Defaults
 
@@ -30,14 +31,14 @@ Disallow legacy vendor-prefixed properties and values when modern equivalents ar
 ## Fix Support and Safety
 
 - Fix support: `yes` (safe mapping subset)
-- Autofix only rewrites prefixes with one-to-one known modern equivalents.
-- Unknown or ambiguous mappings are diagnostic-only.
+- Autofix only rewrites allowlisted one-to-one mappings with known unprefixed equivalents.
+- Non-allowlisted prefixed properties/values are ignored to avoid unsafe fallback churn.
 
 ## Known Divergences from Stylelint
 
 - Imported compatibility suites: `property-no-vendor-prefix` and `value-no-vendor-prefix` (`tests/compat/stylelint/imported/*.json`).
 - v1 does not attempt full historical browser fallback modeling.
-- Prefix replacement set is explicit and conservative.
+- Prefix replacement set is explicit and conservative (generated from pinned Stylelint snapshot via `scripts/extract_stylelint_vendor_allowlist.mjs`).
 - PostCSS-integrated value-parser cases are explicitly skipped via `postcss_integration` entries in `tests/compat/stylelint/skip-manifest.yaml`.
 
 ## Complexity and Performance Notes
