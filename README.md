@@ -1,4 +1,4 @@
-# CSSLint
+# Clint
 
 Fast, deterministic CSS linting for modern projects.
 
