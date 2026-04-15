@@ -21,28 +21,28 @@ jobs:
       matrix:
         include:
           - os: ubuntu-latest
-            artifact_name: csslint-linux-x86_64
-            archive_name: csslint-linux-x86_64.tar.gz
-            binary_path: target/release/csslint
+            artifact_name: clint-linux-x86_64
+            archive_name: clint-linux-x86_64.tar.gz
+            binary_path: target/release/clint
           - os: macos-15-intel
-            artifact_name: csslint-macos-x86_64
-            archive_name: csslint-macos-x86_64.tar.gz
-            binary_path: target/release/csslint
+            artifact_name: clint-macos-x86_64
+            archive_name: clint-macos-x86_64.tar.gz
+            binary_path: target/release/clint
           - os: macos-latest
-            artifact_name: csslint-macos-arm64
-            archive_name: csslint-macos-arm64.tar.gz
-            binary_path: target/release/csslint
+            artifact_name: clint-macos-arm64
+            archive_name: clint-macos-arm64.tar.gz
+            binary_path: target/release/clint
           - os: windows-latest
-            artifact_name: csslint-windows-x86_64
-            archive_name: csslint-windows-x86_64.zip
-            binary_path: target/release/csslint.exe
+            artifact_name: clint-windows-x86_64
+            archive_name: clint-windows-x86_64.zip
+            binary_path: target/release/clint.exe
 
     steps:
       - name: Checkout
         uses: actions/checkout@v6
 
       - name: Setup Rust toolchain
-        uses: dtolnay/rust-toolchain@master
+        uses: dtolnay/rust-toolchain@efa25f7f19611383d5b0ccf2d1c8914531636bf9
         with:
           toolchain: 1.82.0
 
@@ -53,16 +53,16 @@ jobs:
         if: runner.os != 'Windows'
         run: |
           mkdir -p dist
-          cp "${{ matrix.binary_path }}" dist/csslint
-          tar -czf "${{ matrix.archive_name }}" -C dist csslint
+          cp "${{ matrix.binary_path }}" dist/clint
+          tar -czf "${{ matrix.archive_name }}" -C dist clint
 
       - name: Create archive (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Path dist -Force | Out-Null
-          Copy-Item "${{ matrix.binary_path }}" "dist/csslint.exe"
-          Compress-Archive -Path "dist/csslint.exe" -DestinationPath "${{ matrix.archive_name }}" -Force
+          Copy-Item "${{ matrix.binary_path }}" "dist/clint.exe"
+          Compress-Archive -Path "dist/clint.exe" -DestinationPath "${{ matrix.archive_name }}" -Force
 
       - name: Compute checksum (Unix)
         if: runner.os != 'Windows'

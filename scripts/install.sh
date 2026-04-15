@@ -7,7 +7,7 @@ INSTALL_DIR=""
 
 usage() {
   cat <<'EOF'
-Install csslint from GitHub release binaries.
+Install clint from GitHub release binaries.
 
 Usage:
   install.sh [--version <tag>] [--install-dir <dir>] [--repo <owner/name>]
@@ -23,6 +23,14 @@ Examples:
   ./scripts/install.sh --version v0.1.0
   ./scripts/install.sh --install-dir "$HOME/.local/bin"
 EOF
+}
+
+path_contains_dir() {
+  local dir="$1"
+  case ":${PATH:-}:" in
+    *":${dir}:"*|*":${dir}/:"*) return 0 ;;
+    *) return 1 ;;
+  esac
 }
 
 while [[ $# -gt 0 ]]; do
@@ -87,12 +95,12 @@ fi
 
 ASSETS=()
 if [[ "$OS_SLUG" == "linux" ]]; then
-  ASSETS+=("csslint-linux-x86_64.tar.gz")
+  ASSETS+=("clint-linux-x86_64.tar.gz")
 elif [[ "$OS_SLUG" == "macos" ]]; then
   if [[ "$ARCH_SLUG" == "arm64" ]]; then
-    ASSETS+=("csslint-macos-arm64.tar.gz" "csslint-macos-x86_64.tar.gz")
+    ASSETS+=("clint-macos-arm64.tar.gz" "clint-macos-x86_64.tar.gz")
   else
-    ASSETS+=("csslint-macos-x86_64.tar.gz")
+    ASSETS+=("clint-macos-x86_64.tar.gz")
   fi
 fi
 
@@ -190,11 +198,24 @@ popd >/dev/null
 mkdir -p "$INSTALL_DIR"
 
 if command -v install >/dev/null 2>&1; then
-  install -m 0755 "$TMP_DIR/csslint" "$INSTALL_DIR/csslint"
+  install -m 0755 "$TMP_DIR/clint" "$INSTALL_DIR/clint"
 else
-  cp "$TMP_DIR/csslint" "$INSTALL_DIR/csslint"
-  chmod 0755 "$INSTALL_DIR/csslint"
+  cp "$TMP_DIR/clint" "$INSTALL_DIR/clint"
+  chmod 0755 "$INSTALL_DIR/clint"
 fi
 
-echo "Installed csslint to $INSTALL_DIR/csslint"
-echo "Run: csslint --help"
+echo "Installed clint to $INSTALL_DIR/clint"
+
+if path_contains_dir "$INSTALL_DIR"; then
+  echo "Run: clint --help"
+else
+  echo "Note: $INSTALL_DIR is not on your PATH."
+  echo "Add this to your shell profile and restart your shell:"
+  if [[ "$INSTALL_DIR" == "$HOME/.local/bin" ]]; then
+    echo '  export PATH="$HOME/.local/bin:$PATH"'
+  else
+    printf '  export PATH="%s:$PATH"\n' "$INSTALL_DIR"
+  fi
+  echo "Then run: clint --help"
+  echo "For now, run directly: $INSTALL_DIR/clint --help"
+fi

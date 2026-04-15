@@ -13,18 +13,18 @@ It is currently in active development toward a scoped v1.
 ## Current CLI
 
 ```bash
-csslint [path] [--config <path>] [--ignore-path <path>] [--targets <profile>] [--rule <rule_id>]... [--code-frame] [--profile] [--fix] [--format json|pretty] [--version|-v]
+clint [path] [--config <path>] [--ignore-path <path>] [--targets <profile>] [--rule <rule_id>]... [--code-frame] [--profile] [--fix] [--format json|pretty] [--version|-v]
 ```
 
-If `path` is omitted, csslint defaults to `.`.
+If `path` is omitted, clint defaults to `.`.
 
 Core v1 commands:
 
-- `csslint <path>`
-- `csslint <path> --fix`
-- `csslint <path> --format json`
-- `csslint <path> --rule <rule_id>`
-- `csslint --version`
+- `clint <path>`
+- `clint <path> --fix`
+- `clint <path> --format json`
+- `clint <path> --rule <rule_id>`
+- `clint --version`
 
 Exit codes:
 
@@ -42,6 +42,12 @@ curl -fsSL https://raw.githubusercontent.com/stolinski/csslint/main/scripts/inst
 
 The installer prefers the latest stable release and falls back to the newest tag when a stable asset for your platform is unavailable.
 
+If the installer places `clint` in `~/.local/bin`, make sure that directory is on your `PATH`:
+
+```bash
+export PATH="$HOME/.local/bin:$PATH"
+```
+
 Install a specific tag (including prereleases):
 
 ```bash
@@ -58,44 +64,44 @@ Or build locally and run from `target`:
 
 ```bash
 cargo build --release
-./target/release/csslint --help
+./target/release/clint --help
 ```
 
 From GitHub Releases (after a tagged release):
 
 1. Open the repo's latest release page.
 2. Download the archive for your platform:
-   - `csslint-linux-x86_64.tar.gz`
-   - `csslint-macos-arm64.tar.gz`
-   - `csslint-macos-x86_64.tar.gz`
-   - `csslint-windows-x86_64.zip`
+   - `clint-linux-x86_64.tar.gz`
+   - `clint-macos-arm64.tar.gz`
+   - `clint-macos-x86_64.tar.gz`
+   - `clint-windows-x86_64.zip`
 3. Verify checksum with the matching `.sha256` file.
-4. Extract and place `csslint` (or `csslint.exe`) on your `PATH`.
+4. Extract and place `clint` (or `clint.exe`) on your `PATH`.
 
 Quick try from extracted binary:
 
 ```bash
-./csslint --help
-./csslint /path/to/repo --format json
+./clint --help
+./clint /path/to/repo --format json
 ```
 
 ## Quick Start
 
 ```bash
 # lint
-csslint .
+clint .
 
 # print version
-csslint --version
+clint --version
 
 # run only selected rule(s)
-csslint . --rule no_duplicate_selectors
+clint . --rule no_duplicate_selectors
 
 # apply safe fixes
-csslint . --fix
+clint . --fix
 
 # CI-friendly JSON output
-csslint . --format json
+clint . --format json
 ```
 
 ## Config

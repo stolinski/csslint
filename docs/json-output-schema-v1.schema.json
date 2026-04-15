@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://csslint.dev/schemas/json-output-v1.schema.json",
-  "title": "csslint JSON Output Schema v1",
+  "title": "clint JSON Output Schema v1",
   "type": "object",
   "required": [
     "schemaVersion",
@@ -18,7 +18,7 @@
     },
     "tool": {
       "type": "string",
-      "const": "csslint"
+      "const": "clint"
     },
     "summary": {
       "$ref": "#/$defs/summary"

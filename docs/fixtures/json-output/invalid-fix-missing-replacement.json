@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "tool": "csslint",
+  "tool": "clint",
   "summary": {
     "filesScanned": 1,
     "filesLinted": 1,

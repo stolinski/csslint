@@ -21,7 +21,7 @@ Validation fixtures and check script:
 ```json
 {
   "schemaVersion": 1,
-  "tool": "csslint",
+  "tool": "clint",
   "summary": {
     "filesScanned": 0,
     "filesLinted": 0,

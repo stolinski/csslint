@@ -31,7 +31,7 @@ fn long_version_flag_prints_version_and_exits_zero() {
     let stdout = normalize_line_endings(&output.stdout);
     assert_eq!(
         stdout.trim(),
-        format!("csslint {}", env!("CARGO_PKG_VERSION"))
+        format!("clint {}", env!("CARGO_PKG_VERSION"))
     );
     assert!(output.stderr.is_empty());
 }
@@ -46,7 +46,7 @@ fn short_version_flag_prints_version_and_exits_zero() {
     let stdout = normalize_line_endings(&output.stdout);
     assert_eq!(
         stdout.trim(),
-        format!("csslint {}", env!("CARGO_PKG_VERSION"))
+        format!("clint {}", env!("CARGO_PKG_VERSION"))
     );
     assert!(output.stderr.is_empty());
 }
@@ -596,7 +596,7 @@ fn run_csslint(cwd: &Path, args: &[&str]) -> Output {
         .current_dir(cwd)
         .args(args)
         .output()
-        .expect("csslint command should execute")
+        .expect("clint command should execute")
 }
 
 fn diagnostic_paths(report: &Value) -> Vec<String> {
@@ -615,7 +615,7 @@ fn csslint_binary() -> &'static PathBuf {
 }
 
 fn resolve_csslint_binary() -> PathBuf {
-    if let Ok(binary) = std::env::var("CARGO_BIN_EXE_csslint") {
+    if let Ok(binary) = std::env::var("CARGO_BIN_EXE_clint") {
         return PathBuf::from(binary);
     }
 
@@ -623,11 +623,7 @@ fn resolve_csslint_binary() -> PathBuf {
         .join("../..")
         .canonicalize()
         .expect("workspace root should resolve");
-    let binary_name = if cfg!(windows) {
-        "csslint.exe"
-    } else {
-        "csslint"
-    };
+    let binary_name = if cfg!(windows) { "clint.exe" } else { "clint" };
     let fallback_binary = workspace_root
         .join("target")
         .join("debug")
@@ -638,12 +634,12 @@ fn resolve_csslint_binary() -> PathBuf {
 
     let build_status = Command::new("cargo")
         .current_dir(&workspace_root)
-        .args(["build", "-p", "csslint-cli", "--bin", "csslint"])
+        .args(["build", "-p", "csslint-cli", "--bin", "clint"])
         .status()
-        .expect("cargo build for csslint binary should run");
+        .expect("cargo build for clint binary should run");
     assert!(
         build_status.success(),
-        "cargo build for csslint binary should succeed"
+        "cargo build for clint binary should succeed"
     );
 
     fallback_binary

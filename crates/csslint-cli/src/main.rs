@@ -73,7 +73,7 @@ struct CliOptions {
 }
 
 fn print_version() {
-    println!("csslint {}", env!("CARGO_PKG_VERSION"));
+    println!("clint {}", env!("CARGO_PKG_VERSION"));
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -119,7 +119,7 @@ impl fmt::Display for CliError {
             CliErrorKind::Config => "config_error",
             CliErrorKind::Runtime => "runtime_error",
         };
-        write!(f, "csslint {label}: {}", self.message)
+        write!(f, "clint {label}: {}", self.message)
     }
 }
 
@@ -370,7 +370,7 @@ where
             }
             "-h" | "--help" => {
                 return Err(CliError::usage(
-                    "usage: csslint [path] [--config <path>] [--ignore-path <path>] [--targets <profile>] [--rule <rule_id>]... [--code-frame] [--profile] [--fix] [--format json|pretty] [--version|-v]",
+                    "usage: clint [path] [--config <path>] [--ignore-path <path>] [--targets <profile>] [--rule <rule_id>]... [--code-frame] [--profile] [--fix] [--format json|pretty] [--version|-v]",
                 ));
             }
             _ if arg.starts_with('-') => {
@@ -955,14 +955,14 @@ fn should_use_color_output() -> bool {
 fn print_json(result: &LintResult) {
     match render_json(result) {
         Ok(json) => println!("{json}"),
-        Err(error) => eprintln!("csslint runtime_error: failed to serialize json output: {error}"),
+        Err(error) => eprintln!("clint runtime_error: failed to serialize json output: {error}"),
     }
 }
 
 fn print_json_error(error: &CliError) {
     let payload = JsonResult {
         schema_version: 1,
-        tool: "csslint",
+        tool: "clint",
         summary: JsonSummary {
             files_scanned: 0,
             files_linted: 0,
@@ -992,7 +992,7 @@ fn print_json_error(error: &CliError) {
     match serde_json::to_string_pretty(&payload) {
         Ok(json) => println!("{json}"),
         Err(serialize_error) => {
-            eprintln!("csslint runtime_error: failed to serialize json output: {serialize_error}")
+            eprintln!("clint runtime_error: failed to serialize json output: {serialize_error}")
         }
     }
 }
@@ -1046,7 +1046,7 @@ fn print_profile_report(result: &LintResult) {
 fn render_json(result: &LintResult) -> Result<String, serde_json::Error> {
     let payload = JsonResult {
         schema_version: 1,
-        tool: "csslint",
+        tool: "clint",
         summary: JsonSummary {
             files_scanned: result.files_scanned,
             files_linted: result.files_linted,
@@ -1351,7 +1351,7 @@ mod tests {
     #[test]
     fn parse_cli_options_accepts_v1_surface() {
         let parsed = parse_cli_options([
-            "csslint".to_string(),
+            "clint".to_string(),
             "src".to_string(),
             "--fix".to_string(),
             "--format".to_string(),
@@ -1378,19 +1378,16 @@ mod tests {
 
     #[test]
     fn parse_cli_options_defaults_to_current_directory_without_path_argument() {
-        let parsed = parse_cli_options(["csslint".to_string()])
+        let parsed = parse_cli_options(["clint".to_string()])
             .expect("path should default to current directory");
         assert_eq!(parsed.target_path, PathBuf::from("."));
     }
 
     #[test]
     fn parse_cli_options_rejects_unknown_flags() {
-        let error = parse_cli_options([
-            "csslint".to_string(),
-            "src".to_string(),
-            "--wat".to_string(),
-        ])
-        .expect_err("unknown flag should fail");
+        let error =
+            parse_cli_options(["clint".to_string(), "src".to_string(), "--wat".to_string()])
+                .expect_err("unknown flag should fail");
 
         assert_eq!(error.kind, CliErrorKind::Usage);
         assert!(error.message.contains("unknown flag"));
@@ -1399,7 +1396,7 @@ mod tests {
     #[test]
     fn parse_cli_options_accepts_explicit_config_path() {
         let parsed = parse_cli_options([
-            "csslint".to_string(),
+            "clint".to_string(),
             "src".to_string(),
             "--config".to_string(),
             "configs/lint.json".to_string(),
@@ -1413,7 +1410,7 @@ mod tests {
     #[test]
     fn parse_cli_options_accepts_targets_override() {
         let parsed = parse_cli_options([
-            "csslint".to_string(),
+            "clint".to_string(),
             "src".to_string(),
             "--targets".to_string(),
             "defaults".to_string(),
@@ -1426,7 +1423,7 @@ mod tests {
     #[test]
     fn parse_cli_options_accepts_single_rule_filter() {
         let parsed = parse_cli_options([
-            "csslint".to_string(),
+            "clint".to_string(),
             "src".to_string(),
             "--rule".to_string(),
             "no_duplicate_selectors".to_string(),
@@ -1442,7 +1439,7 @@ mod tests {
     #[test]
     fn parse_cli_options_accepts_multiple_rule_filters() {
         let parsed = parse_cli_options([
-            "csslint".to_string(),
+            "clint".to_string(),
             "src".to_string(),
             "--rule".to_string(),
             "no_duplicate_selectors".to_string(),
@@ -1462,7 +1459,7 @@ mod tests {
 
     #[test]
     fn parse_cli_options_accepts_long_version_flag() {
-        let parsed = parse_cli_options(["csslint".to_string(), "--version".to_string()])
+        let parsed = parse_cli_options(["clint".to_string(), "--version".to_string()])
             .expect("--version should parse");
 
         assert!(parsed.version);
@@ -1471,7 +1468,7 @@ mod tests {
     #[test]
     fn parse_cli_options_accepts_short_version_flag() {
         let parsed =
-            parse_cli_options(["csslint".to_string(), "-v".to_string()]).expect("-v should parse");
+            parse_cli_options(["clint".to_string(), "-v".to_string()]).expect("-v should parse");
 
         assert!(parsed.version);
     }
@@ -1479,7 +1476,7 @@ mod tests {
     #[test]
     fn parse_cli_options_accepts_ignore_path_override() {
         let parsed = parse_cli_options([
-            "csslint".to_string(),
+            "clint".to_string(),
             "src".to_string(),
             "--ignore-path".to_string(),
             "config/.csslintignore".to_string(),
@@ -1495,7 +1492,7 @@ mod tests {
     #[test]
     fn parse_cli_options_accepts_code_frame_flag() {
         let parsed = parse_cli_options([
-            "csslint".to_string(),
+            "clint".to_string(),
             "src".to_string(),
             "--code-frame".to_string(),
         ])
@@ -1507,7 +1504,7 @@ mod tests {
     #[test]
     fn parse_cli_options_accepts_profile_flag() {
         let parsed = parse_cli_options([
-            "csslint".to_string(),
+            "clint".to_string(),
             "src".to_string(),
             "--profile".to_string(),
         ])
@@ -1519,7 +1516,7 @@ mod tests {
     #[test]
     fn parse_cli_options_requires_config_value() {
         let error = parse_cli_options([
-            "csslint".to_string(),
+            "clint".to_string(),
             "src".to_string(),
             "--config".to_string(),
         ])
@@ -1532,7 +1529,7 @@ mod tests {
     #[test]
     fn parse_cli_options_requires_targets_value() {
         let error = parse_cli_options([
-            "csslint".to_string(),
+            "clint".to_string(),
             "src".to_string(),
             "--targets".to_string(),
         ])
@@ -1544,12 +1541,9 @@ mod tests {
 
     #[test]
     fn parse_cli_options_requires_rule_value() {
-        let error = parse_cli_options([
-            "csslint".to_string(),
-            "src".to_string(),
-            "--rule".to_string(),
-        ])
-        .expect_err("--rule without value should fail");
+        let error =
+            parse_cli_options(["clint".to_string(), "src".to_string(), "--rule".to_string()])
+                .expect_err("--rule without value should fail");
 
         assert_eq!(error.kind, CliErrorKind::Usage);
         assert!(error.message.contains("missing value for --rule"));
@@ -1558,7 +1552,7 @@ mod tests {
     #[test]
     fn parse_cli_options_rejects_unknown_rule_filter() {
         let error = parse_cli_options([
-            "csslint".to_string(),
+            "clint".to_string(),
             "src".to_string(),
             "--rule".to_string(),
             "no_not_real".to_string(),
@@ -1572,7 +1566,7 @@ mod tests {
     #[test]
     fn parse_cli_options_requires_format_value() {
         let error = parse_cli_options([
-            "csslint".to_string(),
+            "clint".to_string(),
             "src".to_string(),
             "--format".to_string(),
         ])
@@ -1585,7 +1579,7 @@ mod tests {
     #[test]
     fn parse_cli_options_rejects_unsupported_format_value() {
         let error = parse_cli_options([
-            "csslint".to_string(),
+            "clint".to_string(),
             "src".to_string(),
             "--format".to_string(),
             "yaml".to_string(),
@@ -1599,7 +1593,7 @@ mod tests {
     #[test]
     fn parse_cli_options_rejects_duplicate_config_flags() {
         let error = parse_cli_options([
-            "csslint".to_string(),
+            "clint".to_string(),
             "src".to_string(),
             "--config".to_string(),
             "a.json".to_string(),
@@ -1902,7 +1896,7 @@ mod tests {
             serde_json::from_str(&json).expect("json output should be valid json");
 
         assert_eq!(value["schemaVersion"], 1);
-        assert_eq!(value["tool"], "csslint");
+        assert_eq!(value["tool"], "clint");
         assert!(value.get("summary").is_some());
         assert!(value.get("diagnostics").is_some());
         assert!(value.get("internalErrors").is_some());

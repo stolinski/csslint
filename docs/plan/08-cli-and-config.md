@@ -6,11 +6,11 @@ Provide a predictable, low-friction CLI and config system that supports local de
 
 ## CLI Commands (v1)
 
-- `csslint <path>`
-- `csslint <path> --fix`
-- `csslint <path> --format json`
-- `csslint <path> --rule <rule_id>`
-- `csslint --version`
+- `clint <path>`
+- `clint <path> --fix`
+- `clint <path> --format json`
+- `clint <path> --rule <rule_id>`
+- `clint --version`
 
 Recommended optional flags:
 
